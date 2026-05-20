@@ -16,3 +16,10 @@ __pycache__/
 # Exclude other unnecessary files
 README.md
 LICENSE
+
+# Frontend build artifacts (can be very large from local dev)
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+.vscode/
+.idea/
