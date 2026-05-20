@@ -117,10 +117,10 @@ COPY --chmod=755 entrypoint.sh /container/entrypoint.sh
 # Register the package entry point (deps already installed above, skip re-resolving)
 RUN pip install --no-cache-dir --no-deps .
 
-# Remove build tooling and strip precompiled bytecode from site-packages
-# Note: .dist-info dirs must be kept — apscheduler and others use entry_points for plugin discovery
-RUN pip uninstall -y pip setuptools wheel; \
-    find /usr/local/lib/python3.11/site-packages -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null; \
+# Strip precompiled bytecode from site-packages
+# Note: pip/setuptools must be kept — pkg_resources (part of setuptools) is used at runtime
+# Note: .dist-info dirs must be kept — apscheduler uses entry_points for plugin discovery
+RUN find /usr/local/lib/python3.11/site-packages -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null; \
     find /usr/local/lib/python3.11/site-packages -name "*.pyc" -delete 2>/dev/null; \
     true
 
