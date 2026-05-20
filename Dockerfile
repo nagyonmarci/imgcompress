@@ -76,6 +76,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     U2NET_HOME=/container/.u2net
 
+# Exclude docs, man pages and locale files from all subsequent apt-get installs
+RUN echo 'path-exclude /usr/share/doc/*' > /etc/dpkg/dpkg.cfg.d/nodoc \
+ && echo 'path-exclude /usr/share/man/*' >> /etc/dpkg/dpkg.cfg.d/nodoc \
+ && echo 'path-exclude /usr/share/locale/*' >> /etc/dpkg/dpkg.cfg.d/nodoc \
+ && echo 'path-include /usr/share/locale/en*' >> /etc/dpkg/dpkg.cfg.d/nodoc
+
 # Install runtime system dependencies required for full Pillow image format support
 #
 # This layer installs libraries that enable reading/writing many image formats:
@@ -94,7 +100,7 @@ RUN set -eux; \
     libimagequant0 libheif1 liblcms2-2 \
     libfreetype6 libharfbuzz0b libfribidi0 \
     libxcb1 zlib1g libgif7 ghostscript \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /usr/share/doc /usr/share/man
 
 WORKDIR /container
 
@@ -110,6 +116,13 @@ COPY --chmod=755 entrypoint.sh /container/entrypoint.sh
 
 # Register the package entry point (deps already installed above, skip re-resolving)
 RUN pip install --no-cache-dir --no-deps .
+
+# Remove build tooling and strip precompiled bytecode from site-packages
+# Note: .dist-info dirs must be kept — apscheduler and others use entry_points for plugin discovery
+RUN pip uninstall -y pip setuptools wheel; \
+    find /usr/local/lib/python3.11/site-packages -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null; \
+    find /usr/local/lib/python3.11/site-packages -name "*.pyc" -delete 2>/dev/null; \
+    true
 
 # Copy pre-downloaded rembg model from dedicated stage (no runtime download needed)
 COPY --from=rembg-model-download /model-cache/.u2net /container/.u2net
