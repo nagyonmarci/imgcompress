@@ -333,7 +333,7 @@ export const hu: TranslationSchema = {
     original: "Eredeti: {{w}} × {{h}} px",
     removeSavedCrop: "Mentett kivágás eltávolítása",
     discard: "Elvetés",
-    saveCrop: "Kivágás mentése",
+    saveCrop: "Mentés",
     switchToLight: "Váltás világos témára",
     switchToDark: "Váltás sötét témára",
     confirmDialog: {
@@ -364,7 +364,7 @@ export const hu: TranslationSchema = {
       },
     },
     freeRatio: "Szabad",
-    editorTitle: "Kivágó szerkesztő",
+    editorTitle: "Kép kivágása",
     editorDescription: "Állítsd be a kivágási területet, az arányt és a nagyítást, majd kattints a Kivágás mentése vagy az Elvetés gombra.",
     removeDialog: {
       title: "Eltávolítod a mentett kivágást?",
@@ -373,11 +373,11 @@ export const hu: TranslationSchema = {
       removeCrop: "Eltávolítás",
     },
     shortcuts: {
-      title: "Gyorsbillentyűk",
+      title: "Gyors műveletek",
       items: [
         { keys: ["Húzás"],                desc: "Kivágás mozgatása" },
         { keys: ["Sarok húzása"],         desc: "Átméretezés" },
-        { keys: ["Alt", "+ Fogópont"],    desc: "Átméretezés középponttól" },
+        { keys: ["Alt", "+ méretezőpont húzása"], desc: "Átméretezés középpontból" },
         { keys: ["Görgő"],                desc: "Nagyítás kurzoron" },
         { keys: ["Szóköz", "+ Húzás"],    desc: "Pásztázás" },
         { keys: ["Esc"],                  desc: "Bezárás" },
