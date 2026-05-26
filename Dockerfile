@@ -47,7 +47,7 @@ RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
 # 3) Stage: REMBG MODEL DOWNLOAD
 # Separate stage so a code change in backend/ does NOT trigger
 # a 168 MB model re-download. Only re-runs when requirements.txt
-# or rembg.json changes.
+# or app.json changes.
 ############################################################
 FROM python:3.11-slim-bookworm AS rembg-model-download
 
@@ -56,12 +56,12 @@ RUN --mount=type=bind,from=python-deps,source=/wheels,target=/wheels,readonly \
     pip install --no-cache-dir --no-index --find-links=/wheels -r /tmp/requirements.txt
 
 ENV U2NET_HOME=/model-cache/.u2net
-COPY backend/image_converter/config/rembg.json /tmp/rembg.json
+COPY backend/image_converter/config/app.json /tmp/app.json
 RUN python - <<'PY'
 import json
 from rembg import new_session
-with open("/tmp/rembg.json", "r", encoding="utf-8") as f:
-    model_name = json.load(f).get("model_name", "u2net")
+with open("/tmp/app.json", "r", encoding="utf-8") as f:
+    model_name = json.load(f).get("rembg", {}).get("model_name", "u2net")
 new_session(model_name)
 print(f"rembg model cached: {model_name}")
 PY
@@ -110,9 +110,10 @@ COPY setup.py /container/
 RUN --mount=type=bind,from=python-deps,source=/wheels,target=/wheels,readonly \
     pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt
 
-# Copy backend code and entrypoint
+# Copy backend code, entrypoint and healthcheck
 COPY backend/ /container/backend
-COPY --chmod=755 entrypoint.sh /container/entrypoint.sh
+COPY --chmod=755 entrypoint.py /container/entrypoint.py
+COPY healthcheck.py /container/healthcheck.py
 
 # Register the package entry point (deps already installed above, skip re-resolving)
 RUN pip install --no-cache-dir --no-deps .
@@ -142,4 +143,4 @@ LABEL org.opencontainers.image.authors="Karim Zouine <mails.karimzouine@gmail.co
 
 EXPOSE 5000
 
-ENTRYPOINT ["/container/entrypoint.sh"]
+ENTRYPOINT ["python", "/container/entrypoint.py"]
