@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { I18nProvider } from "@/context/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { LogCaptureBootstrap } from "@/components/LogCaptureBootstrap";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,6 +20,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "imgcompress",
   description: "imgcompress: Image Compression Tool",
+  icons: {
+    icon: "/favicon-logo-face.webp",
+    shortcut: "/favicon-logo-face.webp",
+    apple: "/favicon-logo-face.webp",
+  },
 };
 
 export default function RootLayout({
@@ -28,6 +34,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="preload" as="image" href="/logo_transparent.png" fetchPriority="high" />
+        <link rel="preload" as="image" href="/logo-face.webp" type="image/webp" />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <I18nProvider>
           <ThemeProvider
@@ -36,7 +46,7 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            {/* Top-RIGHT: Language + Theme Toggle */}
+            <LogCaptureBootstrap />
             <div className="fixed right-4 top-4 z-50 flex items-center gap-2">
               <LanguageSwitcher />
               <ThemeToggle />
