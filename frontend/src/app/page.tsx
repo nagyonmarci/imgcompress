@@ -499,7 +499,7 @@ function HomePageContent() {
               >
                 imgcompress
               </CardTitle>
-              <p className="text-center text-sm md:text-base text-muted-foreground mt-2">
+              <p className="text-center text-sm md:text-base text-muted-foreground mt-2" data-testid="page-subtitle">
                 {t("page.subtitle")}
               </p>
             </CardHeader>
