@@ -13,7 +13,7 @@ const LANGUAGES = [
 ];
 
 export function LanguageSwitcher() {
-  const { i18n: i18nInstance } = useTranslation();
+  const { t, i18n: i18nInstance } = useTranslation();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => setMounted(true), []);
@@ -39,7 +39,7 @@ export function LanguageSwitcher() {
           "hover:bg-zinc-700 transition-colors text-xs font-medium",
           "focus:outline-none focus:ring-2 focus:ring-zinc-500/40"
         )}
-        aria-label="Select language"
+        aria-label={t("langSwitcher.ariaLabel")}
       >
         <span>{current.flag}</span>
         <SelectPrimitive.Value>

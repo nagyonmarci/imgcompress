@@ -126,6 +126,7 @@ export const en = {
     },
     targetSize: {
       label: "Max file size",
+      placeholder: "e.g., 0.50",
       hint: "It will try to keep each {{format}} at or below this size by automatically adjusting quality.",
       tooltip:
         "Set an optional maximum output size (in MB). Applies to JPEG and AVIF output.",
@@ -143,6 +144,15 @@ export const en = {
     filesList: {
       label: "Files to convert:",
       removeButton: "Remove",
+      removeSavedCropAria: "Remove saved crop",
+      croppedBadge: "cropped {{w}} × {{h}}",
+      cropTooltip: "This file has a saved crop. Click the x to remove that crop.",
+      editCropTooltip: "Edit the saved crop for this file.",
+      addCropTooltip: "Choose the visible area before converting this file.",
+      cropNotSupportedPdf: "PDF crop is not supported yet. PDFs can contain multiple pages, so crop needs a dedicated page-selection workflow first.",
+      cropNotSupported: "Crop is not supported for this format at the moment.",
+      cropButton: "Crop",
+      editButton: "Edit",
     },
     error: {
       label: "Error:",
@@ -164,7 +174,8 @@ export const en = {
     description_other: "Download your compressed Images individually or all at once.",
     downloadAll: "Download All as Zip",
     close: "Close",
-    downloadingFile: "Downloading {{fileName}}...",
+    downloadingFile: "Downloading: {{fileName}}...",
+    downloadingZip: "Downloading: Folder...",
   },
 
   storage: {
@@ -191,6 +202,7 @@ export const en = {
   },
 
   statusFloating: {
+    systemStatusTitle: "System Status",
     title: "System & Connectivity Status",
     backend: "Container Backend:",
     network: "Network Access:",
@@ -213,6 +225,8 @@ export const en = {
 
   errorModal: {
     title: "Error Occurred",
+    subtitle: "The action couldn't complete. Copy the trace below and open a ticket so it can be fixed.",
+    detailsLabel: "Technical details",
     notifyDeveloper:
       "Please open a ticket and notify the developer so this can be fixed ASAP.",
     copyError: "Copy Error",
@@ -278,6 +292,93 @@ export const en = {
 
   langSwitcher: {
     ariaLabel: "Switch language",
+  },
+
+  theme: {
+    switchToLight: "Switch to light theme",
+    switchToDark: "Switch to dark theme",
+    lightTitle: "Light",
+    darkTitle: "Dark",
+    toggle: "Toggle theme",
+  },
+
+  runtimeError: {
+    title: "Runtime Error",
+    subtitle: "Something broke while rendering. Copy the trace below and open a ticket so it can be fixed.",
+    stackTrace: "Stack trace",
+    tryAgain: "Try Again",
+    includeTitle: "Include this in the ticket",
+    includeDescription: "Attach the diagnostics file to the ticket. It includes the error trace, browser context, frontend logs, and backend logs when the running backend exposes them.",
+    downloadDiagnostics: "Download Diagnostics",
+    copied: "Copied!",
+    copyError: "Copy Error",
+    openTicket: "Open Ticket",
+  },
+
+  crop: {
+    aspectRatio: "Aspect ratio",
+    zoom: "Zoom",
+    zoomOut: "Zoom out",
+    zoomIn: "Zoom in",
+    resetZoom: "Reset zoom",
+    resetZoomFull: "Reset zoom and pan",
+    dimensions: "Dimensions",
+    resetSelection: "Reset Selection",
+    width: "Width",
+    height: "Height",
+    original: "Original: {{w}} × {{h}} px",
+    removeSavedCrop: "Remove Saved Crop",
+    discard: "Discard",
+    saveCrop: "Save Crop",
+    switchToLight: "Switch to light theme",
+    switchToDark: "Switch to dark theme",
+    confirmDialog: {
+      title: "Discard crop changes?",
+      description: "Your unsaved crop adjustments will be lost. The previously saved crop, if any, will stay unchanged.",
+      keepEditing: "Keep Editing",
+      discardChanges: "Discard Changes",
+    },
+    loading: {
+      serverWords: ["Please", "wait", "a", "bit,", "I'm", "almost", "ready"],
+      localWords: ["Opening", "crop", "editor"],
+      serverMessage: "{{label}} needs a server-rendered bitmap before cropping. Preparing it now.",
+      localMessage: "Opening {{label}} in the crop editor.",
+    },
+    failure: {
+      header: "Couldn't prepare this {{label}} for cropping.",
+      whyTitle: "Why did this happen?",
+      technicalDetails: "Technical details",
+      stillConvert: "You can still convert this file as-is. It just won't have a crop applied.",
+      closeButton: "Close",
+      reportButton: "Report this issue",
+      causes: {
+        backendNotReachable: "The backend service isn't reachable yet. If you just rebuilt the container, give it a few seconds to come up and try again.",
+        networkDropped: "The connection to the backend dropped mid-upload. Check that the container is still running and try again.",
+        variantNotSupported: "This file may be a {{label}} variant the decoder can't read (multi-layer, non-standard color mode, encrypted, etc.). Re-exporting from the source app as a flat {{label}} or a regular PNG / JPG usually fixes this.",
+        missingLibraries: "{{label}} files always go through the backend's decoder. If the decoder is missing native libraries (e.g. libheif for HEIC), the build may have skipped them — re-running the build with the optional codecs enabled usually resolves it.",
+        reportIssue: "If none of the above fits, copy the technical details below and open a ticket — the trace shows exactly which step failed.",
+      },
+    },
+    freeRatio: "Free",
+    editorTitle: "Crop Editor",
+    editorDescription: "Adjust the crop region, ratio, and zoom for this image, then click Save Crop or Discard.",
+    removeDialog: {
+      title: "Remove saved crop?",
+      description: "This clears the saved crop for this file. The original file will stay in your conversion list.",
+      keepCrop: "Keep Crop",
+      removeCrop: "Remove Crop",
+    },
+    shortcuts: {
+      title: "Shortcuts",
+      items: [
+        { keys: ["Drag"],                 desc: "Move crop" },
+        { keys: ["Drag corner"],          desc: "Resize" },
+        { keys: ["Alt", "+ Drag handle"], desc: "Resize from center" },
+        { keys: ["Wheel"],                desc: "Zoom at cursor" },
+        { keys: ["Space", "+ Drag"],      desc: "Pan" },
+        { keys: ["Esc"],                  desc: "Close" },
+      ],
+    },
   },
 } as const;
 

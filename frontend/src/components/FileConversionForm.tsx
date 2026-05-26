@@ -213,10 +213,10 @@ const FileConversionForm: React.FC<FileConversionFormProps> = ({
                           className="inline-flex items-center gap-1 text-xs font-medium rounded-full pl-2 pr-1 py-0.5 bg-green-500/15 text-green-600 dark:text-green-300 border border-green-500/30"
                           data-testid="dropzone-crop-badge"
                         >
-                          cropped {savedCrop.width} × {savedCrop.height}
+                          {t("form.filesList.croppedBadge", { w: savedCrop.width, h: savedCrop.height })}
                           <button
                             type="button"
-                            aria-label="Remove saved crop"
+                            aria-label={t("form.filesList.removeSavedCropAria")}
                             disabled={isLoading}
                             onClick={() => setConfirmCropRemoveFor(file.name)}
                             className="rounded-full p-0.5 hover:bg-green-500/25 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -230,7 +230,7 @@ const FileConversionForm: React.FC<FileConversionFormProps> = ({
                         side="top"
                         className={cn("max-w-56 p-2 rounded shadow-lg border", tooltipSurface)}
                       >
-                        This file has a saved crop. Click the x to remove that crop.
+                        {t("form.filesList.cropTooltip")}
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -252,7 +252,7 @@ const FileConversionForm: React.FC<FileConversionFormProps> = ({
                           data-testid="dropzone-crop-file-btn"
                         >
                           <CropIcon className="h-3.5 w-3.5" />
-                          {savedCrop ? "Edit" : "Crop"}
+                          {savedCrop ? t("form.filesList.editButton") : t("form.filesList.cropButton")}
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent
@@ -260,8 +260,8 @@ const FileConversionForm: React.FC<FileConversionFormProps> = ({
                         className={cn("max-w-56 p-2 rounded shadow-lg border", tooltipSurface)}
                       >
                         {savedCrop
-                          ? "Edit the saved crop for this file."
-                          : "Choose the visible area before converting this file."}
+                          ? t("form.filesList.editCropTooltip")
+                          : t("form.filesList.addCropTooltip")}
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -278,7 +278,7 @@ const FileConversionForm: React.FC<FileConversionFormProps> = ({
                             data-testid="dropzone-crop-disabled-btn"
                           >
                             <CropIcon className="h-3.5 w-3.5" />
-                            Crop
+                            {t("form.filesList.cropButton")}
                           </Button>
                         </span>
                       </TooltipTrigger>
@@ -287,8 +287,8 @@ const FileConversionForm: React.FC<FileConversionFormProps> = ({
                         className={cn("max-w-60 p-2 rounded shadow-lg border", tooltipSurface)}
                       >
                         {fileExt === "pdf"
-                          ? "PDF crop is not supported yet. PDFs can contain multiple pages, so crop needs a dedicated page-selection workflow first."
-                          : "Crop is not supported for this format at the moment."}
+                          ? t("form.filesList.cropNotSupportedPdf")
+                          : t("form.filesList.cropNotSupported")}
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -446,7 +446,7 @@ const FileConversionForm: React.FC<FileConversionFormProps> = ({
               id="pdfPreset"
               className={cn(selectSurface, "focus:border-blue-500 focus:ring-2 focus:ring-blue-500")}
             >
-              <SelectValue placeholder="Original" />
+              <SelectValue placeholder={t("form.pdfPreset.options.original")} />
             </SelectTrigger>
             <SelectContent className={selectSurface}>
               <SelectItem value="original">{t("form.pdfPreset.options.original")}</SelectItem>
@@ -494,7 +494,7 @@ const FileConversionForm: React.FC<FileConversionFormProps> = ({
               className={cn(selectSurface, "focus:border-blue-500 focus:ring-2 focus:ring-blue-500")}
               disabled={pdfPaginate}
             >
-              <SelectValue placeholder="Fit" />
+              <SelectValue placeholder={t("form.pdfScale.options.fit")} />
             </SelectTrigger>
             <SelectContent className={selectSurface}>
               <SelectItem value="fit">{t("form.pdfScale.options.fit")}</SelectItem>
@@ -755,7 +755,7 @@ const FileConversionForm: React.FC<FileConversionFormProps> = ({
               inputMode="decimal"
               step="0.01"
               min="0.01"
-              placeholder="e.g., 0.50"
+              placeholder={t("form.targetSize.placeholder")}
               value={targetSizeMB}
               onChange={(e) => setTargetSizeMB(e.target.value)}
               disabled={isLoading}

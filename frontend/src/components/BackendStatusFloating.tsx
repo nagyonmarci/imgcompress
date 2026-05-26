@@ -16,7 +16,7 @@ export function BackendStatusFloating() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          title="System Status"
+          title={t("statusFloating.systemStatusTitle")}
           className={`fixed bottom-4 right-4 z-[70] p-3 rounded-full shadow-lg transition 
           ${isDown ? "bg-red-600 hover:bg-red-500" : "bg-neutral-900 hover:bg-neutral-700"} 
           text-white active:scale-95`}
