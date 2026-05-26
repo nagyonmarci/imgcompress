@@ -198,6 +198,7 @@ export const hu: TranslationSchema = {
     backend: "Tároló háttérrendszer:",
     network: "Hálózati hozzáférés:",
     mode: "Mód:",
+    modeRunning: "fut",
     backendDown: "Nem elérhető ❌",
     backendUp: "Működik",
     internetYes: "Van internet-hozzáférés",

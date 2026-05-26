@@ -195,6 +195,7 @@ export const en = {
     backend: "Container Backend:",
     network: "Network Access:",
     mode: "Mode:",
+    modeRunning: "running",
     backendDown: "Is Down ❌",
     backendUp: "Is Working",
     internetYes: "Has Internet Access",

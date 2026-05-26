@@ -63,7 +63,7 @@ export function BackendStatusFloating() {
               </b>
             </p>
 
-            <p>{t("statusFloating.mode")} <b>{status ?? t("statusFloating.internetUnknown")}</b></p>
+            <p>{t("statusFloating.mode")} <b>{status === "running" ? t("statusFloating.modeRunning") : (status ?? t("statusFloating.internetUnknown"))}</b></p>
 
             <button
               onClick={checkInternet}
