@@ -176,7 +176,7 @@ const FileConversionForm: React.FC<FileConversionFormProps> = ({
           )}
         </div>
       ),
-    [error]
+    [error, t]
   );
 
   const renderFilesList = useMemo(
@@ -321,6 +321,7 @@ const FileConversionForm: React.FC<FileConversionFormProps> = ({
       supportedExtensions,
       cropUnsupportedExtensions,
       tooltipSurface,
+      t,
     ]
   );
 

@@ -23,10 +23,11 @@ export const CropLoadingPanel: React.FC<CropLoadingPanelProps> = ({
   const { t } = useTranslation();
   const label = fileFormatLabel(file);
   const isServer = variant === "server";
-  const loadingWords = t(
+  const rawWords = t(
     isServer ? "crop.loading.serverWords" : "crop.loading.localWords",
     { returnObjects: true }
-  ) as string[];
+  );
+  const loadingWords = Array.isArray(rawWords) ? (rawWords as string[]) : [];
   const loadingCopy = isServer
     ? t("crop.loading.serverMessage", { label })
     : t("crop.loading.localMessage", { label });

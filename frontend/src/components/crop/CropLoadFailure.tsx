@@ -2,7 +2,6 @@
 
 import React from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 import { AlertTriangle, ChevronDown, ServerCrash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fileFormatLabel, isBrowserNativeFormat } from "@/lib/crop";
@@ -15,11 +14,18 @@ interface CropLoadFailureProps {
   onReport?: (payload: { message: string; details?: string }) => void;
 }
 
-function causesFor(file: File, message: string, t: TFunction): string[] {
-  const causes: string[] = [];
+export const CropLoadFailure: React.FC<CropLoadFailureProps> = ({
+  file,
+  message,
+  details,
+  onDiscard,
+  onReport,
+}) => {
+  const { t } = useTranslation();
   const label = fileFormatLabel(file);
   const lower = message.toLowerCase();
 
+  const causes: string[] = [];
   if (lower.includes("/api/crop/bitmap is not available") || lower.includes("404")) {
     causes.push(t("crop.failure.causes.backendNotReachable"));
   }
@@ -33,19 +39,6 @@ function causesFor(file: File, message: string, t: TFunction): string[] {
     causes.push(t("crop.failure.causes.missingLibraries", { label }));
   }
   causes.push(t("crop.failure.causes.reportIssue"));
-  return causes;
-}
-
-export const CropLoadFailure: React.FC<CropLoadFailureProps> = ({
-  file,
-  message,
-  details,
-  onDiscard,
-  onReport,
-}) => {
-  const { t } = useTranslation();
-  const label = fileFormatLabel(file);
-  const causes = causesFor(file, message, t);
 
   return (
     <div

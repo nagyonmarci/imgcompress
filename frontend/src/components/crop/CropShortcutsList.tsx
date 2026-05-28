@@ -12,7 +12,10 @@ export const CropShortcutsList: React.FC<CropShortcutsListProps> = ({
   surfaceClass,
 }) => {
   const { t } = useTranslation();
-  const shortcuts = t("crop.shortcuts.items", { returnObjects: true }) as { keys: string[]; desc: string }[];
+  const rawShortcuts = t("crop.shortcuts.items", { returnObjects: true });
+  const shortcuts = Array.isArray(rawShortcuts)
+    ? (rawShortcuts as { keys: string[]; desc: string }[])
+    : [];
 
   return (
     <div
