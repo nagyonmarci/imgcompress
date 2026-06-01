@@ -1,7 +1,6 @@
 import urllib.request
 import sys
 
-
 BASE_URL = "http://localhost:5000"
 
 
@@ -33,6 +32,5 @@ if __name__ == "__main__":
     except Exception as exc:
         print(f"Healthcheck failed: {exc}")
         sys.exit(1)
-
     print("Healthcheck passed.")
     sys.exit(0)

@@ -1,40 +1,88 @@
-# Stage 1: FRONTEND BUILD
-# ------------------------------------------------------------------------------------------
-# Docker Hardened Image (DHI) Debian 13 base with Socket Firewall pre-installed
-# to protect build environment from malicious dependencies.
-# Ref: https://hub.docker.com/hardened-images/catalog/dhi/node
-# Constraint: Node 26 is not yet available in DHI, fallback to LTS Node 24 (supported until 2027).
-FROM dhi.io/node:24-debian13-sfw-dev@sha256:d33e9108a3a7ef728ee61f90a951dce680433a768a9a09134fd721b10f8b110b AS frontend-build-stage
+# syntax=docker/dockerfile:1.7
 
-ENV NODE_ENV=production
-
-WORKDIR /app
-COPY frontend/ ./frontend
+############################################################
+# 1) Stage: FRONTEND BUILD
+############################################################
+FROM node:26-slim AS frontend-build
 
 WORKDIR /app/frontend
-# Note: Hardened Node image pre-installs pnpm.
-# Intent: Use BuildKit cache mount for the pnpm global store to speed up rebuilds
-# when package.json is modified.
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm config set store-dir /pnpm/store && \
+
+# Enable corepack with the pinned pnpm version from package.json
+RUN npm install -g pnpm@11.0.9
+
+# Copy only lockfiles first so pnpm install is cached independently of source changes
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
+
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
     CI=true pnpm install --frozen-lockfile
+
+# Copy source after install to avoid invalidating the install layer on code changes
+COPY frontend/ ./
+
 RUN pnpm run build
 
 # The built static files are in /app/frontend/out/
 
+############################################################
+# 2) Stage: PYTHON DEPENDENCY BUILD
+############################################################
+FROM python:3.11-slim-bookworm AS python-deps
 
-# Stage 2: PYTHON BACKEND BUILD
-# ------------------------------------------------------------------------------------------
-# Intent: Fallback to debian-base:trixie-debian13-dev because dhi.io/python:3.11-debian13 is 
-# currently affected by CVE-2026-6100 (CVSS 9.1) without an upstream patch.
-# Ref: https://scout.docker.com/vulnerabilities/id/CVE-2026-6100
-FROM dhi.io/debian-base:trixie-debian13-dev@sha256:9415967aa0ed8adea8b5c048994259d1982026dca143d0303c7bbe0e11ed67d3 AS backend-build-stage
+RUN set -eux; \
+    apt-get update -o Acquire::Retries=5 -o Acquire::http::Timeout=30 && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
+    libjpeg-dev libpng-dev libtiff-dev libwebp-dev libopenjp2-7-dev \
+    libimagequant-dev libheif-dev liblcms2-dev \
+    libfreetype6-dev libharfbuzz-dev libfribidi-dev \
+    libxcb1-dev zlib1g-dev libgif-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Use 'uv' for high-performance Python package management instead of standard pip.
-# Ref: https://github.com/astral-sh/uv
-COPY --from=dhi.io/uv:0.11.11-debian13@sha256:33783120b652192063c0193ffbb6f5685d798221bb730906595188d7c1b2a37e /uv /uvx /bin/
+WORKDIR /build
+COPY requirements.txt /build/
+RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
 
-# 🧩 Install system dependencies required for full Pillow image format support
+############################################################
+# 3) Stage: REMBG MODEL DOWNLOAD
+# Separate stage so a code change in backend/ does NOT trigger
+# a 168 MB model re-download. Only re-runs when requirements.txt
+# or app.json changes.
+############################################################
+FROM python:3.11-slim-bookworm AS rembg-model-download
+
+COPY requirements.txt /tmp/
+RUN --mount=type=bind,from=python-deps,source=/wheels,target=/wheels,readonly \
+    pip install --no-cache-dir --no-index --find-links=/wheels -r /tmp/requirements.txt
+
+ENV U2NET_HOME=/model-cache/.u2net
+COPY backend/image_converter/config/app.json /tmp/app.json
+RUN python - <<'PY'
+import json
+from rembg import new_session
+with open("/tmp/app.json", "r", encoding="utf-8") as f:
+    model_name = json.load(f).get("rembg", {}).get("model_name", "u2net")
+new_session(model_name)
+print(f"rembg model cached: {model_name}")
+PY
+
+############################################################
+# 4) Stage: FINAL PYTHON IMAGE
+############################################################
+FROM python:3.11-slim-bookworm
+
+# Prevent .pyc files from being written into image layers
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    U2NET_HOME=/container/.u2net
+
+# Exclude docs, man pages and locale files from all subsequent apt-get installs
+RUN echo 'path-exclude /usr/share/doc/*' > /etc/dpkg/dpkg.cfg.d/nodoc \
+ && echo 'path-exclude /usr/share/man/*' >> /etc/dpkg/dpkg.cfg.d/nodoc \
+ && echo 'path-exclude /usr/share/locale/*' >> /etc/dpkg/dpkg.cfg.d/nodoc \
+ && echo 'path-include /usr/share/locale/en*' >> /etc/dpkg/dpkg.cfg.d/nodoc
+
+# Install runtime system dependencies required for full Pillow image format support
 #
 # This layer installs libraries that enable reading/writing many image formats:
 #   - libjpeg, libpng, libtiff, libwebp, libopenjp2: common raster formats (JPEG, PNG, TIFF, WebP, JPEG2000)
@@ -45,105 +93,44 @@ COPY --from=dhi.io/uv:0.11.11-debian13@sha256:33783120b652192063c0193ffbb6f5685d
 #   - libxcb, zlib, libgif: core compression and GIF/X11 support
 #
 # Together, these libraries ensure Pillow (PIL) can handle nearly every major image type used in production.
-# But I haven't tested all in CI, yet.
-
-# Feature: Docker cache mounts for faster builds.
-# (apt doesn't need to resolve again after first successful run)
-RUN rm -f /etc/apt/apt.conf.d/docker-clean; \
-    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
-
-# Workaround: BuildKit 'COPY' cannot dynamically resolve host-architecture triplet 
-# paths (e.g. x86_64 vs aarch64). We export the matching directory to a predictable 
-# path (/dpkg-export) to facilitate architecture-agnostic multi-arch copying later.
-#
-# Strategy: Runtime Closure Extractor (ldd + dpkg-L hybrid)
-# Ref: extract_deps.sh
-COPY scripts/extract_deps.sh /tmp/extract_deps.sh
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    set -eux; \
-    \
-    # Stub SysV init helpers so postinst scripts don't crash in a container.
-    # x11-common (a ghostscript transitive dep) calls both update-rc.d and invoke-rc.d
-    # in its postinst, but neither exists in a minimal image without sysvinit/openrc.
-    printf '#!/bin/sh\nexit 0\n'   > /usr/sbin/update-rc.d && chmod +x /usr/sbin/update-rc.d; \
-    printf '#!/bin/sh\nexit 0\n'   > /usr/sbin/invoke-rc.d && chmod +x /usr/sbin/invoke-rc.d; \
-    printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d; \
-    \
+RUN set -eux; \
     apt-get update -o Acquire::Retries=5 -o Acquire::http::Timeout=30 && \
     apt-get install -y --no-install-recommends \
-        ghostscript \
-        libjpeg62-turbo libpng16-16 libtiff6 libwebp7 libopenjp2-7 \
-        libimagequant0 libheif1 liblcms2-2 \
-        libfreetype6 libharfbuzz0b libfribidi0 \
-        libxcb1 zlib1g libgif7 \
-        dumb-init \
-        libstdc++6 libgomp1 && \
-    \
-    # Phase 1 (ldd):   resolve .so paths from gs binary → copy directly by filesystem path.
-    #                   Immune to Debian t64 renames (libpng16-16 → libpng16-16t64, etc.)
-    # Phase 2 (dpkg-L): copy data files (CMaps, fonts, dumb-init binary) that ldd misses.
-    # See extract_deps.sh for details.
-    EXTRACT_DEPS_TARGET=/dpkg-export sh /tmp/extract_deps.sh /usr/bin/gs && \
-    \
-    # Generate ld.so.cache so the dynamic linker can find all .so files at runtime.
-    # Without this, libgs.so.10 fails to load its device plugins ("Unable to open
-    # the initial device") because the hardened runtime image has no ld.so.cache.
-    ldconfig && cp --parents /etc/ld.so.cache /dpkg-export/
-
-# Setup runtime directory for nonroot user (pre-configured in DHI, UID/GID 65532).
-RUN mkdir -p /container && \
-    chown -R nonroot:nonroot /container
-
-USER nonroot
-
-ENV VIRTUAL_ENV=/container/venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-# Setup standalone Python managed by uv to avoid missing python in final stage.
-# This standalone python is statically built and does not depend on OS libraries.
-ENV UV_PYTHON_INSTALL_DIR=/container/python
-RUN --mount=type=cache,target=/home/nonroot/.cache/uv,uid=65532,gid=65532 \
-    uv python install 3.11 && \
-    uv venv --python 3.11 $VIRTUAL_ENV
+    libjpeg62-turbo libpng16-16 libtiff6 libwebp7 libwebpdemux2 libwebpmux3 libopenjp2-7 \
+    libimagequant0 libheif1 liblcms2-2 \
+    libfreetype6 libharfbuzz0b libfribidi0 \
+    libxcb1 zlib1g libgif7 ghostscript \
+    && rm -rf /var/lib/apt/lists/* /usr/share/doc /usr/share/man
 
 WORKDIR /container
 
-COPY --chown=nonroot:nonroot requirements.txt .
-COPY --chown=nonroot:nonroot setup.py .
+# Install Python packages from pre-built wheels
+COPY requirements.txt /container/
+COPY setup.py /container/
+RUN --mount=type=bind,from=python-deps,source=/wheels,target=/wheels,readonly \
+    pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt
 
-RUN --mount=type=cache,target=/home/nonroot/.cache/uv,uid=65532,gid=65532 \
-    uv pip install -r requirements.txt
+# Copy backend code, entrypoint and healthcheck
+COPY backend/ /container/backend
+COPY --chmod=755 entrypoint.py /container/entrypoint.py
+COPY healthcheck.py /container/healthcheck.py
 
-COPY --chown=nonroot:nonroot backend/ ./backend
+# Register the package entry point (deps already installed above, skip re-resolving)
+RUN pip install --no-cache-dir --no-deps .
 
-RUN --mount=type=cache,target=/home/nonroot/.cache/uv,uid=65532,gid=65532 \
-    uv pip install .
+# Strip precompiled bytecode from site-packages
+# Note: pip/setuptools must be kept — pkg_resources (part of setuptools) is used at runtime
+# Note: .dist-info dirs must be kept — apscheduler uses entry_points for plugin discovery
+RUN find /usr/local/lib/python3.11/site-packages -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null; \
+    find /usr/local/lib/python3.11/site-packages -name "*.pyc" -delete 2>/dev/null; \
+    true
 
-# Pre-download rembg model to prevent download overhead during runtime.
-ENV U2NET_HOME=/container/.u2net
-# Intent: Since backend code is copied earlier, any code change invalidates layer cache.
-# We use a BuildKit cache mount at /cache/u2net so the model is not re-downloaded 
-# from the internet, then copy it to the persistent U2NET_HOME inside the image.
-RUN --mount=type=cache,target=/cache/u2net,uid=65532,gid=65532 \
-    U2NET_HOME=/cache/u2net python - <<'PY' && cp -a /cache/u2net/. /container/.u2net/
-from backend.image_converter.config import settings
-from rembg import new_session
-model_name = settings.get().rembg.model_name
-new_session(model_name)
-print(f"rembg model cached: {model_name}")
-PY
+# Copy pre-downloaded rembg model from dedicated stage (no runtime download needed)
+COPY --from=rembg-model-download /model-cache/.u2net /container/.u2net
 
-COPY --chown=nonroot:nonroot entrypoint.py ./entrypoint.py
-COPY --chown=nonroot:nonroot healthcheck.py ./healthcheck.py
-
-# Create static site directory. Required pre-creation as a nonroot user 
-# to avoid permission issues when copying frontend assets.
+# Create static site directory and copy built frontend
 RUN mkdir -p /container/backend/image_converter/presentation/web/static_site
-
-
-# Stage 3: FINAL RUNTIME
-# ------------------------------------------------------------------------------------------
-FROM dhi.io/debian-base:trixie-debian13@sha256:79ea7f22d1b7e3f73b0988258b62bcbf73da44f0d82476fbb95d811130168e55 AS final-stage
+COPY --from=frontend-build /app/frontend/out/. /container/backend/image_converter/presentation/web/static_site
 
 LABEL org.opencontainers.image.authors="Karim Zouine <mails.karimzouine@gmail.com>" \
       org.opencontainers.image.vendor="Karim Zouine" \
@@ -154,34 +141,6 @@ LABEL org.opencontainers.image.authors="Karim Zouine <mails.karimzouine@gmail.co
       org.opencontainers.image.documentation="https://github.com/karimz1/imgcompress" \
       org.opencontainers.image.licenses="GPL-3.0-or-later"
 
-ENV VIRTUAL_ENV=/container/venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-ENV U2NET_HOME=/container/.u2net
-
-WORKDIR /container
-
-COPY --from=backend-build-stage /dpkg-export/ /
-COPY --from=backend-build-stage --chown=65532:65532 /container/python /container/python
-COPY --from=backend-build-stage --chown=65532:65532 /container/venv /container/venv
-COPY --from=backend-build-stage --chown=65532:65532 /container/.u2net /container/.u2net
-COPY --from=backend-build-stage --chown=65532:65532 /container/backend/ /container/backend
-COPY --from=backend-build-stage --chown=65532:65532 /container/entrypoint.py /container/entrypoint.py
-COPY --from=backend-build-stage --chown=65532:65532 /container/healthcheck.py /container/healthcheck.py
-
-COPY --from=frontend-build-stage --chown=65532:65532 /app/frontend/out/. \
-    /container/backend/image_converter/presentation/web/static_site
-COPY --from=frontend-build-stage --chown=65532:65532 /app/frontend/.next \
-    /container/backend/image_converter/presentation/web/static_site
-COPY --from=frontend-build-stage --chown=65532:65532 /app/frontend/public \
-    /container/backend/image_converter/presentation/web/static_site
-
-USER nonroot
-
 EXPOSE 5000
 
-# Constraint: The runtime hardened image lacks a shell (/bin/sh). 
-# We execute the healthcheck via python directly.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD ["python", "/container/healthcheck.py"]
-
-ENTRYPOINT ["/usr/bin/dumb-init", "--", "python", "/container/entrypoint.py"]
+ENTRYPOINT ["python", "/container/entrypoint.py"]

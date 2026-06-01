@@ -1,5 +1,6 @@
 services:
   imgcompress:
+    build: .
     image: karimz1/imgcompress:latest
     container_name: imgcompress
     restart: always
