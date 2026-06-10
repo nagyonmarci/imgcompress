@@ -4,6 +4,10 @@
 # to protect build environment from malicious dependencies.
 # Ref: https://hub.docker.com/hardened-images/catalog/dhi/node
 # Constraint: Node 26 is not yet available in DHI, fallback to LTS Node 24 (supported until 2027).
+# Note: newer DHI Node 24 digests have dropped pre-installed pnpm (verified by
+# failed build during v0.8.2). Stay pinned to this digest until DHI restores
+# pnpm in the image, or until we add an explicit corepack/pnpm install step.
+# digest-refresh: skip
 FROM dhi.io/node:24-debian13-sfw-dev@sha256:d33e9108a3a7ef728ee61f90a951dce680433a768a9a09134fd721b10f8b110b AS frontend-build-stage
 
 ENV NODE_ENV=production
@@ -28,11 +32,11 @@ RUN pnpm run build
 # Intent: Fallback to debian-base:trixie-debian13-dev because dhi.io/python:3.11-debian13 is 
 # currently affected by CVE-2026-6100 (CVSS 9.1) without an upstream patch.
 # Ref: https://scout.docker.com/vulnerabilities/id/CVE-2026-6100
-FROM dhi.io/debian-base:trixie-debian13-dev@sha256:9415967aa0ed8adea8b5c048994259d1982026dca143d0303c7bbe0e11ed67d3 AS backend-build-stage
+FROM dhi.io/debian-base:trixie-debian13-dev@sha256:41cc0e62bbb3b8cbb29deb40c987e55577cf98c4d00ede32b40159a1a4d87565 AS backend-build-stage
 
 # Use 'uv' for high-performance Python package management instead of standard pip.
 # Ref: https://github.com/astral-sh/uv
-COPY --from=dhi.io/uv:0.11.11-debian13@sha256:33783120b652192063c0193ffbb6f5685d798221bb730906595188d7c1b2a37e /uv /uvx /bin/
+COPY --from=dhi.io/uv:0.11.18-debian13@sha256:be1c2d5905075a57885f83a04f4f64eab0d4b99c4695803d9a707a7fd448152d /uv /uvx /bin/
 
 # 🧩 Install system dependencies required for full Pillow image format support
 #
@@ -70,7 +74,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     printf '#!/bin/sh\nexit 0\n'   > /usr/sbin/invoke-rc.d && chmod +x /usr/sbin/invoke-rc.d; \
     printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d; \
     \
-    apt-get update -o Acquire::Retries=5 -o Acquire::http::Timeout=30 && \
+    # The DHI apt mirror occasionally serves a Packages.gz whose size doesn't
+    # match the hash in the still-cached Release file ("File has unexpected
+    # size ... Mirror sync in progress?"). It self-heals within minutes, so
+    # retry apt-get update with backoff instead of failing the whole build.
+    i=0; \
+    until apt-get update -o Acquire::Retries=5 -o Acquire::http::Timeout=30; do \
+        i=$((i+1)); \
+        if [ "$i" -ge 5 ]; then echo "apt-get update failed after 5 attempts" >&2; exit 1; fi; \
+        echo "apt-get update transient failure (attempt $i/5), retrying in 15s..."; \
+        sleep 15; \
+    done && \
     apt-get install -y --no-install-recommends \
         ghostscript \
         libjpeg62-turbo libpng16-16 libtiff6 libwebp7 libopenjp2-7 \
@@ -143,7 +157,7 @@ RUN mkdir -p /container/backend/image_converter/presentation/web/static_site
 
 # Stage 3: FINAL RUNTIME
 # ------------------------------------------------------------------------------------------
-FROM dhi.io/debian-base:trixie-debian13@sha256:79ea7f22d1b7e3f73b0988258b62bcbf73da44f0d82476fbb95d811130168e55 AS final-stage
+FROM dhi.io/debian-base:trixie-debian13@sha256:436787c2d77ed1ef1cfe3ce5848f3968244d8948463a29094e1e672da9a6fa24 AS final-stage
 
 LABEL org.opencontainers.image.authors="Karim Zouine <mails.karimzouine@gmail.com>" \
       org.opencontainers.image.vendor="Karim Zouine" \
