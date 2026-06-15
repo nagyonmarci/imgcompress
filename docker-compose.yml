@@ -23,6 +23,9 @@ services:
   imgcompress-mcp:
     profiles: ["mcp"]
     image: karimz1/imgcompress-mcp:latest
+    build:
+      context: ./mcp
+      dockerfile: Dockerfile
     container_name: imgcompress-mcp
     restart: always
     depends_on:
