@@ -4,7 +4,9 @@ from pathlib import Path
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP("imgcompress")
+_host = os.environ.get("FASTMCP_HOST", "127.0.0.1")
+_port = int(os.environ.get("FASTMCP_PORT", "9090"))
+mcp = FastMCP("imgcompress", host=_host, port=_port)
 BASE = os.environ.get("IMGCOMPRESS_URL", "http://localhost:5000")
 
 
@@ -110,9 +112,4 @@ async def health_check() -> dict:
 
 
 if __name__ == "__main__":
-    transport = os.environ.get("MCP_TRANSPORT", "stdio")
-    if transport == "sse":
-        port = int(os.environ.get("MCP_PORT", "9090"))
-        mcp.run(transport="sse", host="0.0.0.0", port=port)
-    else:
-        mcp.run()
+    mcp.run(transport=os.environ.get("MCP_TRANSPORT", "stdio"))

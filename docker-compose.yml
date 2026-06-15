@@ -36,4 +36,5 @@ services:
     environment:
       - IMGCOMPRESS_URL=http://imgcompress:5000
       - MCP_TRANSPORT=sse
-      - MCP_PORT=9090
+      - FASTMCP_HOST=0.0.0.0
+      - FASTMCP_PORT=9090
