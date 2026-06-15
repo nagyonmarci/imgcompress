@@ -113,6 +113,35 @@ jobs:
           cache-from: type=gha,scope=app-deploy
           cache-to: type=gha,mode=max,scope=app-deploy
 
+      - name: Compute MCP image tags
+        id: mcp-tags
+        shell: bash
+        env:
+          GITHUB_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          IMAGE_DH="karimz1/imgcompress-mcp"
+          IMAGE_GH="ghcr.io/${GITHUB_OWNER}/imgcompress-mcp"
+          TAGS=()
+          if [[ "${GITHUB_REF:-}" == refs/tags/release_* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/release_}"
+            TAGS+=("$IMAGE_DH:${VERSION}" "$IMAGE_DH:latest" "$IMAGE_GH:${VERSION}" "$IMAGE_GH:latest")
+          else
+            TAGS+=("$IMAGE_DH:nightly" "$IMAGE_GH:nightly")
+          fi
+          printf 'tags=%s\n' "$(IFS=,; echo "${TAGS[*]}")" >> "$GITHUB_OUTPUT"
+
+      - name: Build and Push MCP Docker Image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./mcp
+          file: ./mcp/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.mcp-tags.outputs.tags }}
+          cache-from: type=gha,scope=mcp-deploy
+          cache-to: type=gha,mode=max,scope=mcp-deploy
+
   update-dockerhub-description:
     needs: deploy-image-to-dockerhub
     if: startsWith(github.ref, 'refs/tags/release_')

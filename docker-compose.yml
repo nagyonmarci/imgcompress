@@ -16,3 +16,21 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  # Optional MCP sidecar — opt-in via: docker compose --profile mcp up -d
+  # Exposes the imgcompress REST API as MCP tools over SSE on port 9090.
+  # Configure your MCP client (e.g. Claude Desktop) with: http://localhost:9090/sse
+  imgcompress-mcp:
+    profiles: ["mcp"]
+    image: karimz1/imgcompress-mcp:latest
+    container_name: imgcompress-mcp
+    restart: always
+    depends_on:
+      imgcompress:
+        condition: service_healthy
+    ports:
+      - "9090:9090"
+    environment:
+      - IMGCOMPRESS_URL=http://imgcompress:5000
+      - MCP_TRANSPORT=sse
+      - MCP_PORT=9090
