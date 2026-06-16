@@ -164,7 +164,7 @@ def test_invalid_value_types_are_rejected(config_file, path, bad_value, message)
     ("path", "bad_value", "message"),
     [
         (("uploads", "max_file_size_mebibytes"), 0, ">= 1"),
-        (("web", "port"), 70000, "<= 65535"),
+        (("web", "port"), 70000, "between 1 and 65535"),
         (("crop_preview", "max_retry_attempts"), 0, ">= 1"),
     ],
 )
@@ -214,7 +214,7 @@ def test_loader_collects_every_error_at_once(config_file):
     message = str(exc.value)
     assert "missing required config key: uploads.max_file_size_mebibytes" in message
     assert "config key 'web.host' must be a non-empty string" in message
-    assert "config key 'web.port' must be <= 65535" in message
+    assert "config key 'web.port' must be an integer between 1 and 65535" in message
     assert "config key 'features.is_dev_mode_enabled' must be a boolean" in message
 
 

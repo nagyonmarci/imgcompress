@@ -1,5 +1,4 @@
 from enum import Enum
-from backend.image_converter.core.internals.utilities import Result
 
 class ImageFormat(Enum):
     JPEG = "JPEG"
@@ -18,18 +17,6 @@ class ImageFormat(Enum):
             return cls[value.upper()]
         except KeyError:
             raise ValueError(f"Unsupported image format: '{value}'")
-
-    @classmethod
-    def from_string_result(cls, value: str) -> Result["ImageFormat"]:
-        """
-        Converts a string to an ImageFormat enum member using the result pattern.
-        Returns a Result object that is successful if the conversion succeeded,
-        or contains an error message if the format is not supported.
-        """
-        try:
-            return Result.success(cls[value.upper()])
-        except KeyError:
-            return Result.failure(f"Unsupported image format: '{value}'")
 
     def get_file_extension(self) -> str:
         """

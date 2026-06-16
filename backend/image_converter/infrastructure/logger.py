@@ -68,6 +68,33 @@ def read_backend_log_file() -> str:
             return f.read()
 
 
+_LEVEL_COLORS = {
+    "error": Fore.RED,
+    "info": Fore.GREEN,
+    "warning": Fore.YELLOW,
+    "debug": Fore.CYAN,
+}
+
+_LEVEL_LOG_METHODS = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+}
+
+
+class _ColorizingFormatter(logging.Formatter):
+    """Colorizes the message according to the original log level name,
+    passed in via the LogRecord's `levelname` (set per-call by Logger.log)."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = super().format(record)
+        color = _LEVEL_COLORS.get(getattr(record, "level_key", ""))
+        if color:
+            return f"{color}{message}{Style.RESET_ALL}"
+        return message
+
+
 class Logger:
     def __init__(self, debug: bool = False, json_output: bool = False, buffer_size: int = 1000):
         self.debug = debug
@@ -84,7 +111,7 @@ class Logger:
         self.logger.setLevel(logging.DEBUG if self.debug else logging.INFO)
 
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler.setFormatter(_ColorizingFormatter("%(message)s"))
         self.logger.addHandler(handler)
 
     def log(self, message: str, level: str = "info", **kwargs):
@@ -114,23 +141,7 @@ class Logger:
         self.logs.append(log_entry)
 
     def _log_plain_text(self, message: str, level: str):
-        colored = self._colorize_message(message, level)
-        if level == "debug":
-            self.logger.debug(colored)
-        elif level == "info":
-            self.logger.info(colored)
-        elif level == "warning":
-            self.logger.warning(colored)
-        elif level == "error":
-            self.logger.error(colored)
-
-    def _colorize_message(self, message: str, level: str) -> str:
-        if level == "error":
-            return f"{Fore.RED}{message}{Style.RESET_ALL}"
-        if level == "info":
-            return f"{Fore.GREEN}{message}{Style.RESET_ALL}"
-        if level == "warning":
-            return f"{Fore.YELLOW}{message}{Style.RESET_ALL}"
-        if level == "debug":
-            return f"{Fore.CYAN}{message}{Style.RESET_ALL}"
-        return message
+        log_level = _LEVEL_LOG_METHODS.get(level)
+        if log_level is None:
+            return
+        self.logger.log(log_level, message, extra={"level_key": level})

@@ -1,12 +1,11 @@
 from io import BytesIO
 
+import pytest
 from PIL import Image
 
 from backend.image_converter.config import settings
-from backend.image_converter.core.internals.utilities import (
-    Result,
-    supported_extensions,
-)
+from backend.image_converter.core.exceptions import ConversionError
+from backend.image_converter.core.internals.utilities import supported_extensions
 from backend.image_converter.infrastructure.pdf_page_extractor import PdfPageExtractor
 from backend.image_converter.application.file_payload_expander import FilePayloadExpander
 
@@ -23,9 +22,7 @@ def test_When_PdfPageExtractorProcessesSample_Expect_PageRendered():
     with open(SAMPLE_PDF, "rb") as f:
         data = f.read()
 
-    result = extractor.rasterize_pages(data, "imgcompress_screenshot.pdf")
-    assert result.is_successful
-    pages = list(result.value)
+    pages = list(extractor.rasterize_pages(data, "imgcompress_screenshot.pdf"))
     assert len(pages) == 1
     page_bytes = pages[0]
     with Image.open(BytesIO(page_bytes)) as img:
@@ -49,10 +46,10 @@ def test_When_PdfiumRaisesRuntimeError_Expect_ExtractorFailure(monkeypatch):
 
     logger = _RecordingLogger()
     extractor = PdfPageExtractor(logger=logger)
-    result = extractor.rasterize_pages(b"", "broken.pdf")
 
-    assert result.is_successful is False
-    assert "PDF could not be rendered." == result.error
+    with pytest.raises(ConversionError, match="PDF could not be rendered."):
+        extractor.rasterize_pages(b"", "broken.pdf")
+
     assert any(
         "boom" in message and "broken.pdf" in message
         for message, _ in logger.messages
@@ -61,7 +58,7 @@ def test_When_PdfiumRaisesRuntimeError_Expect_ExtractorFailure(monkeypatch):
 
 class DummyRenderer:
     def render(self, source_name, data):
-        return Result.success(data)
+        return data
 
 
 def test_When_ExpandingPdfPayload_Expect_PageMetadataCreated(monkeypatch):
@@ -69,12 +66,10 @@ def test_When_ExpandingPdfPayload_Expect_PageMetadataCreated(monkeypatch):
 
     class DummyExtractor:
         def rasterize_pages(self, data, source_hint):
-            return Result.success(fake_pages)
+            return fake_pages
 
     expander = FilePayloadExpander(DummyExtractor(), DummyRenderer())
-    result = expander.expand("demo.pdf", b"bytes")
-    assert result.is_successful
-    payloads = list(result.value)
+    payloads = list(expander.expand("demo.pdf", b"bytes"))
     assert len(payloads) == 2
     assert payloads[0].label == "demo.pdf (page 1)"
     assert payloads[0].page_index == 1
@@ -83,19 +78,16 @@ def test_When_ExpandingPdfPayload_Expect_PageMetadataCreated(monkeypatch):
 def test_When_ExtractorFails_Expect_PayloadExpansionFailure(monkeypatch):
     class DummyExtractor:
         def rasterize_pages(self, data, source_hint):
-            return Result.failure("invalid pdf")
+            raise ConversionError("invalid pdf")
 
     expander = FilePayloadExpander(DummyExtractor(), DummyRenderer())
-    result = expander.expand("demo.pdf", b"bytes")
-    assert result.is_successful is False
-    assert "invalid pdf" in result.error
+    with pytest.raises(ConversionError, match="invalid pdf"):
+        expander.expand("demo.pdf", b"bytes")
 
 
 def test_When_FileIsNonPdf_Expect_ExpanderReturnsOriginalPayload():
     expander = FilePayloadExpander(PdfPageExtractor(), DummyRenderer())
-    result = expander.expand("image.png", b"bytes")
-    assert result.is_successful
-    payloads = result.value
+    payloads = expander.expand("image.png", b"bytes")
     assert len(payloads) == 1
     assert payloads[0].label == "image.png"
     assert payloads[0].page_index is None

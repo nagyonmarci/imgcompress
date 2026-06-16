@@ -2,8 +2,6 @@ import os.path
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
 from werkzeug.security import safe_join
 
 from backend.image_converter.infrastructure.cleanup_service import CleanupService
@@ -32,7 +30,7 @@ class TemporaryFolderService:
     def create_temp_dir(self, prefix: str) -> str:
         return tempfile.mkdtemp(prefix=prefix, dir=self.temp_dir)
 
-    def get_validated_path(self, folder_name: Optional[str]) -> Optional[str]:
+    def get_validated_path(self, folder_name: str | None) -> str | None:
         if not folder_name:
             return None
         resolved = self._resolve_inside_temp(folder_name)
@@ -40,9 +38,9 @@ class TemporaryFolderService:
 
     def resolve_download_target(
         self,
-        folder: Optional[str],
-        filename: Optional[str],
-    ) -> Optional[DownloadTarget]:
+        folder: str | None,
+        filename: str | None,
+    ) -> DownloadTarget | None:
         if not folder or not filename:
             return None
         requested_name = filename.strip()
@@ -62,7 +60,7 @@ class TemporaryFolderService:
             return None
         return DownloadTarget(str(resolved_target), resolved_target.name)
 
-    def _resolve_inside_temp(self, path: str) -> Optional[Path]:
+    def _resolve_inside_temp(self, path: str) -> Path | None:
         if not path:
             return None
         base = str(self.base_dir)

@@ -4,10 +4,7 @@ from io import BytesIO
 from PIL import Image
 
 from backend.image_converter.application.dtos import ConversionDetails
-from backend.image_converter.core.factory.converter_factory import ImageConverterFactory
-from backend.image_converter.core.factory.jpeg_converter import JpegConverter
-from backend.image_converter.core.factory.png_converter import PngConverter
-from backend.image_converter.core.factory.rembg_png_converter import RembgPngConverter
+from backend.image_converter.core.converters import convert_and_save, get_encoder, encode_rembg_png
 from backend.image_converter.core.enums.image_format import ImageFormat
 from backend.image_converter.infrastructure.logger import Logger
 
@@ -15,7 +12,7 @@ from backend.image_converter.infrastructure.logger import Logger
 def sample_rgba_png():
     """Create a 64x64 RGBA image in memory."""
     buf = BytesIO()
-    img = Image.new("RGBA", (64, 64), (0, 255, 0, 128))                     
+    img = Image.new("RGBA", (64, 64), (0, 255, 0, 128))
     img.save(buf, format="PNG")
     return buf.getvalue()
 
@@ -26,55 +23,48 @@ def mock_logger():
 
 def test_When_ImageContainsTransparency_Expect_JpegConverterFlattensAlpha(sample_rgba_png, tmp_path, mock_logger):
     """
-    Ensure JpegConverter composites alpha over white.
+    Ensure JPEG encoding composites alpha over white.
     """
-    converter = JpegConverter(quality=80, logger=mock_logger)
     source_path = "/fake/source.png"
     dest_path = str(tmp_path / "out.jpg")
 
-    result = converter.convert(sample_rgba_png, source_path, dest_path)
-    assert result.is_successful is True
-    assert result.error is None
-    assert isinstance(result.value, ConversionDetails)
-    assert result.value.destination == dest_path
+    result = convert_and_save(ImageFormat.JPEG, sample_rgba_png, source_path, dest_path, quality=80, logger=mock_logger)
+    assert isinstance(result, ConversionDetails)
+    assert result.destination == dest_path
 
-                                             
+
     with open(dest_path, "rb") as f:
         output_data = f.read()
     with Image.open(BytesIO(output_data)) as out_img:
         assert out_img.mode == "RGB"
-                                           
+
         assert out_img.size == (64, 64)
 
 def test_When_ImageContainsTransparency_Expect_PngConverterPreservesAlpha(sample_rgba_png, tmp_path, mock_logger):
     """
-    Ensure PngConverter preserves alpha channel.
+    Ensure PNG encoding preserves alpha channel.
     """
-    converter = PngConverter(logger=mock_logger)
     source_path = "/fake/source.png"
     dest_path = str(tmp_path / "out.png")
 
-    result = converter.convert(sample_rgba_png, source_path, dest_path)
-    assert result.is_successful is True
-    assert result.error is None
-    assert isinstance(result.value, ConversionDetails)
-    assert result.value.destination == dest_path
+    result = convert_and_save(ImageFormat.PNG, sample_rgba_png, source_path, dest_path, quality=80, logger=mock_logger)
+    assert isinstance(result, ConversionDetails)
+    assert result.destination == dest_path
 
     with open(dest_path, "rb") as f:
         output_data = f.read()
     with Image.open(BytesIO(output_data)) as out_img:
-        assert out_img.mode == "RGBA"                       
+        assert out_img.mode == "RGBA"
         assert out_img.size == (64, 64)
 
 
-def test_When_RembgRequested_Expect_FactoryReturnsRembgConverter(mock_logger):
-    converter = ImageConverterFactory.create_converter(
-        ImageFormat.PNG,
-        80,
-        mock_logger,
-        use_rembg=True,
-    )
-    assert isinstance(converter, RembgPngConverter)
+def test_When_RembgRequested_Expect_FactoryReturnsRembgEncoder(mock_logger, monkeypatch):
+    import sys
+    from unittest.mock import MagicMock
+    monkeypatch.setitem(sys.modules, "rembg", MagicMock())
+
+    encoder = get_encoder(ImageFormat.PNG, 80, use_rembg=True)
+    assert encoder.__name__ == "<lambda>"
 
 
 def test_When_RembgConverts_Expect_PngWithAlpha(sample_rgba_png, tmp_path, mock_logger, monkeypatch):
@@ -101,14 +91,18 @@ def test_When_RembgConverts_Expect_PngWithAlpha(sample_rgba_png, tmp_path, mock_
     mock_rembg.remove = fake_remove
     monkeypatch.setitem(sys.modules, "rembg", mock_rembg)
 
-    converter = RembgPngConverter(logger=mock_logger, model_name="u2net")
+    out_data = encode_rembg_png(image_data, model_name="u2net")
     dest_path = tmp_path / "out.png"
-    result = converter.convert(image_data, str(sample_path), str(dest_path))
-
-    assert result.is_successful is True
-    assert result.error is None
-    assert isinstance(result.value, ConversionDetails)
-    assert result.value.destination == str(dest_path)
+    dest_path.write_bytes(out_data)
 
     with Image.open(dest_path) as out_img:
         assert out_img.mode == "RGBA"
+
+
+def test_When_FormatIsValid_Expect_ImageFormatResolved():
+    assert ImageFormat.from_string("jpeg") == ImageFormat.JPEG
+
+
+def test_When_FormatIsUnsupported_Expect_ValueErrorRaised():
+    with pytest.raises(ValueError, match="Unsupported image format"):
+        ImageFormat.from_string("unsupported_format")

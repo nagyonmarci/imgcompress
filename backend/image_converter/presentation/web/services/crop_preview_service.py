@@ -2,11 +2,11 @@ import time
 import uuid
 from io import BytesIO
 from pathlib import Path
-from typing import Callable, Iterable, Optional
+from typing import Callable, Iterable
 
 from PIL import Image, UnidentifiedImageError
 
-from backend.image_converter.core.internals.utilities import Result
+from backend.image_converter.core.exceptions import ConversionError
 
 
 class CropPreviewService:
@@ -34,16 +34,16 @@ class CropPreviewService:
         self,
         filename: str,
         raw_bytes: bytes,
-        request_id: Optional[str] = None,
-    ) -> Result[BytesIO]:
+        request_id: str | None = None,
+    ) -> BytesIO:
         return self._build(filename, lambda: raw_bytes, len(raw_bytes), request_id)
 
     def build_preview_from_file(
         self,
         filename: str,
         file_path: str,
-        request_id: Optional[str] = None,
-    ) -> Result[BytesIO]:
+        request_id: str | None = None,
+    ) -> BytesIO:
         path = Path(file_path).resolve(strict=True)
         return self._build(filename, path.read_bytes, path.stat().st_size, request_id)
 
@@ -52,12 +52,12 @@ class CropPreviewService:
         filename: str,
         load_bytes: Callable[[], bytes],
         byte_count: int,
-        request_id: Optional[str],
-    ) -> Result[BytesIO]:
+        request_id: str | None,
+    ) -> BytesIO:
         rid = request_id or uuid.uuid4().hex[:8]
         if self._is_unsupported(filename):
             self._log(rid, f"rejected unsupported extension for '{filename}'")
-            return Result.failure("This format is not compatible with the crop editor.")
+            raise ConversionError("This format is not compatible with the crop editor.")
 
         for attempt in range(1, self.max_attempts + 1):
             try:
@@ -66,10 +66,10 @@ class CropPreviewService:
                     f"decoding '{filename}' ({byte_count} bytes), "
                     f"attempt {attempt}/{self.max_attempts}",
                 )
-                return Result.success(self._build_preview_png(filename, load_bytes()))
+                return self._build_preview_png(filename, load_bytes())
             except self._PERMANENT_ERROR_TYPES as exc:
                 self._log(rid, f"permanent failure for '{filename}': {exc}", "error")
-                return Result.failure("Could not decode this format for cropping.")
+                raise ConversionError("Could not decode this format for cropping.") from None
             except Exception as exc:
                 self._log(
                     rid,
@@ -80,17 +80,15 @@ class CropPreviewService:
                 if attempt < self.max_attempts:
                     time.sleep(0.25 * attempt)
 
-        return Result.failure(
+        raise ConversionError(
             "Could not decode this format for cropping "
             f"after {self.max_attempts} attempts."
         )
 
     def _build_preview_png(self, filename: str, raw_bytes: bytes) -> BytesIO:
         expanded = self.payload_expander.expand(filename, raw_bytes)
-        if not expanded.is_successful:
-            raise RuntimeError(expanded.error)
 
-        first_payload = next(iter(expanded.value), None)
+        first_payload = next(iter(expanded), None)
         if first_payload is None:
             raise RuntimeError("No content to render.")
 

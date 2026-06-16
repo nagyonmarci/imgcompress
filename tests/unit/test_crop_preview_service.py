@@ -1,9 +1,10 @@
 from io import BytesIO
 
+import pytest
 from PIL import Image
 
 from backend.image_converter.application.file_payload_expander import PagePayload
-from backend.image_converter.core.internals.utilities import Result
+from backend.image_converter.core.exceptions import ConversionError
 from backend.image_converter.presentation.web.services.crop_preview_service import CropPreviewService
 
 UNSUPPORTED_EXTENSIONS = [".pdf", ".svg"]
@@ -25,8 +26,8 @@ class FlakyPayloadExpander:
     def expand(self, source_name, data):
         self.calls += 1
         if self.calls <= self.failures_before_success:
-            return Result.failure("temporary preview failure")
-        return Result.success([PagePayload(data=data, page_index=None, label=source_name)])
+            raise ConversionError("temporary preview failure")
+        return [PagePayload(data=data, page_index=None, label=source_name)]
 
 
 def _png_bytes():
@@ -55,12 +56,11 @@ def test_crop_preview_service_retries_then_returns_png(monkeypatch):
 
     result = service.build_preview("test.psd", _png_bytes(), request_id="unit-retry")
 
-    assert result.is_successful
     assert expander.calls == 3
     error_messages = _errors(logger.messages)
     assert len(error_messages) == 2
     assert all("rid=unit-retry" in m for m, _ in logger.messages)
-    with Image.open(result.value) as img:
+    with Image.open(result) as img:
         assert img.format == "PNG"
         assert img.size == (2, 2)
 
@@ -79,12 +79,11 @@ def test_crop_preview_service_fails_after_max_attempts(monkeypatch):
         max_attempts=3,
     )
 
-    result = service.build_preview("test.psd", _png_bytes(), request_id="unit-fail")
+    with pytest.raises(ConversionError, match="after 3 attempts"):
+        service.build_preview("test.psd", _png_bytes(), request_id="unit-fail")
 
-    assert not result.is_successful
     assert expander.calls == 3
     assert len(_errors(logger.messages)) == 3
-    assert "after 3 attempts" in result.error
     assert all("rid=unit-fail" in m for m, _ in logger.messages)
 
 
@@ -98,11 +97,10 @@ def test_crop_preview_service_rejects_non_crop_compatible_extension():
         max_attempts=3,
     )
 
-    result = service.build_preview("document.pdf", _png_bytes())
+    with pytest.raises(ConversionError, match="not compatible"):
+        service.build_preview("document.pdf", _png_bytes())
 
-    assert not result.is_successful
     assert expander.calls == 0
-    assert "not compatible" in result.error
 
 
 class MalformedPayloadExpander:
@@ -115,9 +113,7 @@ class MalformedPayloadExpander:
 
     def expand(self, source_name, data):
         self.calls += 1
-        return Result.success(
-            [PagePayload(data=b"not-an-image", page_index=None, label=source_name)]
-        )
+        return [PagePayload(data=b"not-an-image", page_index=None, label=source_name)]
 
 
 def test_crop_preview_service_fails_fast_on_undecodable_payload(monkeypatch):
@@ -134,8 +130,8 @@ def test_crop_preview_service_fails_fast_on_undecodable_payload(monkeypatch):
         max_attempts=5,
     )
 
-    result = service.build_preview("malformed.png", _png_bytes()[:8], request_id="unit-malformed")
+    with pytest.raises(ConversionError):
+        service.build_preview("malformed.png", _png_bytes()[:8], request_id="unit-malformed")
 
-    assert not result.is_successful
     assert expander.calls == 1
     assert any(lvl == "error" for _, lvl in logger.messages)

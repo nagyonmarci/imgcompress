@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Tuple
+from typing import Callable
 
 def find_best_quality_under_target(
     encoder: Callable[[int, bytes], bytes],
@@ -8,9 +8,9 @@ def find_best_quality_under_target(
     q_min: int = 10,
     q_max: int = 95,
     max_attempts: int = 10,
-) -> Tuple[int, bytes, int]:
+) -> tuple[int, bytes, int]:
     low, high = q_min, q_max
-    best: Optional[Tuple[int, bytes, int]] = None
+    best: tuple[int, bytes, int] | None = None
 
     for _ in range(max_attempts):
         if low > high:

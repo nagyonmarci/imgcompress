@@ -3,7 +3,7 @@ import traceback
 from dataclasses import dataclass
 from typing import Iterable
 
-from backend.image_converter.core.internals.utilities import Result
+from backend.image_converter.core.exceptions import ConversionError
 from backend.image_converter.infrastructure.logger import Logger
 
 @dataclass
@@ -23,25 +23,24 @@ class LocalStorage:
                 stem, _ = os.path.splitext(name)
                 yield FileItem(path=p, name=name, stem=stem)
 
-    def read_bytes(self, path: str) -> Result[bytes]:
+    def read_bytes(self, path: str) -> bytes:
         try:
             with open(path, "rb") as f:
-                return Result.success(f.read())
+                return f.read()
         except Exception:
             self._log_failure("read", path)
-            return Result.failure("Failed to read file.")
+            raise ConversionError("Failed to read file.") from None
 
-    def write_bytes(self, path: str, data: bytes) -> Result[None]:
+    def write_bytes(self, path: str, data: bytes) -> None:
         try:
             directory = os.path.dirname(path)
             if directory:
                 os.makedirs(directory, exist_ok=True)
             with open(path, "wb") as f:
                 f.write(data)
-            return Result.success(None)
         except Exception:
             self._log_failure("write", path)
-            return Result.failure("Failed to write file.")
+            raise ConversionError("Failed to write file.") from None
 
     def build_dest_path(self, folder: str, name: str) -> str:
         return os.path.join(folder, name)

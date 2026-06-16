@@ -1,17 +1,16 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple, Dict
 
-from backend.image_converter.core.internals.utilities import Result
+from backend.image_converter.core.exceptions import ConversionError
 
 
 @dataclass(frozen=True)
 class PdfPreset:
-    size: Optional[Tuple[int, int]]
+    size: tuple[int, int] | None
     margin_mm: float = 0.0
     auto_rotate: bool = False
 
 
-PDF_PRESETS: Dict[str, PdfPreset] = {
+PDF_PRESETS: dict[str, PdfPreset] = {
     "original": PdfPreset(size=None, margin_mm=0.0, auto_rotate=False),
     "a4-auto": PdfPreset(size=(595, 842), margin_mm=10.0, auto_rotate=True),
     "a4-portrait": PdfPreset(size=(595, 842), margin_mm=10.0, auto_rotate=False),
@@ -26,29 +25,17 @@ PDF_PRESETS: Dict[str, PdfPreset] = {
 PDF_SCALE_MODES = {"fit", "fill"}
 
 
-def normalize_pdf_preset(value: Optional[str]) -> str:
-    if not value:
-        return "original"
-    cleaned = value.strip().lower().replace("_", "-").replace(" ", "-")
-    return cleaned or "original"
-
-
-def resolve_pdf_preset(value: Optional[str]) -> Result[PdfPreset]:
-    key = normalize_pdf_preset(value)
+def resolve_pdf_preset(value: str | None) -> PdfPreset:
+    key = value.strip().lower().replace("_", "-").replace(" ", "-") if value else "original"
+    key = key or "original"
     if key not in PDF_PRESETS:
-        return Result.failure(f"Unsupported PDF preset: '{value}'")
-    return Result.success(PDF_PRESETS[key])
+        raise ConversionError(f"Unsupported PDF preset: '{value}'")
+    return PDF_PRESETS[key]
 
 
-def normalize_pdf_scale(value: Optional[str]) -> str:
-    if not value:
-        return "fit"
-    cleaned = value.strip().lower()
-    return cleaned or "fit"
-
-
-def resolve_pdf_scale(value: Optional[str]) -> Result[str]:
-    key = normalize_pdf_scale(value)
+def resolve_pdf_scale(value: str | None) -> str:
+    key = value.strip().lower() if value else "fit"
+    key = key or "fit"
     if key not in PDF_SCALE_MODES:
-        return Result.failure(f"Unsupported PDF scale mode: '{value}'")
-    return Result.success(key)
+        raise ConversionError(f"Unsupported PDF scale mode: '{value}'")
+    return key

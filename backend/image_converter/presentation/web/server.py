@@ -63,9 +63,9 @@ def start_scheduler():
     cleanup_service = CleanupService(TEMP_DIR, EXPIRATION_TIME, app_logger)
 
     def scheduled_cleanup():
-        result = cleanup_service.cleanup_temp_folders()
-        if not result.is_successful:
-            app_logger.log(f"Cleanup error: {result.error}", "error")
+        summary = cleanup_service.cleanup_temp_folders()
+        if summary.errors:
+            app_logger.log(f"Cleanup error: {summary.errors}", "error")
         else:
             app_logger.log("Scheduled cleanup completed successfully.", "info")
 

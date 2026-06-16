@@ -1,43 +1,25 @@
-from unittest.mock import MagicMock
 from backend.image_converter.infrastructure.logger import Logger
-from backend.image_converter.core.image_conversion_processor import ImageConversionProcessor
-from backend.image_converter.core.factory.jpeg_converter import JpegConverter
-from backend.image_converter.core.enums.image_format import ImageFormat
+from backend.image_converter.presentation.cli.app import _output_results
 from tests.test_utils import capture_stdout, capture_logger_output
-from backend.image_converter.application.dtos import PageProcessingResult
+from backend.image_converter.application.dtos import ConversionSummary, PageProcessingResult
 import pytest
 
 @pytest.fixture
 def mock_logger():
     """
-    Returns a Logger instance for testing. 
+    Returns a Logger instance for testing.
     Debug=True for color output (if desired), and JSON mode off by default.
     """
     return Logger(debug=True, json_output=False)
 
-@pytest.fixture
-def mock_converter():
-    """
-    Returns a MagicMock for the FileManager class to avoid filesystem operations.
-    """
-    return MagicMock(spec=JpegConverter)
-
-def test_When_OutputResultsRunsInJsonMode_Expect_SummarySerialized(mock_converter):
+def test_When_OutputResultsRunsInJsonMode_Expect_SummarySerialized():
     """
     Test that output_results prints valid JSON when json_output=True,
     capturing the printed JSON via capture_stdout.
     """
-    processor = ImageConversionProcessor(source="/mock/source",
-        destination="/mock/destination",
-        image_format=ImageFormat.JPEG,
-        quality=80,
-        width=800,
-        debug=False,
-        json_output=True)
-    processor.prepare_destination = MagicMock()
-    processor.logger.logs = []
-    processor.converter = mock_converter
-    processor.results = [
+    logger = Logger(debug=False, json_output=True)
+    logger.logs = []
+    results = [
         PageProcessingResult(
             file="test1.jpg",
             source="/mock/source/test1.jpg",
@@ -56,8 +38,8 @@ def test_When_OutputResultsRunsInJsonMode_Expect_SummarySerialized(mock_converte
         ),
     ]
 
-    summary = processor.generate_summary()
-    output = capture_stdout(processor.output_results, summary)
+    summary = ConversionSummary(processed_pages=results, errors_count=0)
+    output = capture_stdout(_output_results, summary, logger, True, False)
 
     import json
     output_json = json.loads(output)
@@ -94,24 +76,15 @@ def test_When_OutputResultsRunsInJsonMode_Expect_SummarySerialized(mock_converte
     assert output_json == expected_json
 
 
-def test_When_OutputResultsRunsInTextModeWithErrors_Expect_FailuresLogged(mock_converter):
+def test_When_OutputResultsRunsInTextModeWithErrors_Expect_FailuresLogged():
     """
     Test that output_results logs plain text when json_output=False,
     capturing logger-based messages via capture_logger_output.
     """
-    processor = ImageConversionProcessor(source="/mock/source",
-        destination="/mock/destination",
-        image_format=ImageFormat.JPEG,
-        quality=80,
-        width=800,
-        debug=True,
-        json_output=False)
-    processor.prepare_destination = MagicMock()
+    logger = Logger(debug=True, json_output=False)
+    logger.logs = []
 
-    processor.logger.logs = []
-    processor.converter = mock_converter
-
-    processor.results = [
+    results = [
         PageProcessingResult(
             file="test1.jpg",
             source="/mock/source/test1.jpg",
@@ -131,8 +104,8 @@ def test_When_OutputResultsRunsInTextModeWithErrors_Expect_FailuresLogged(mock_c
         ),
     ]
 
-    summary = processor.generate_summary()
-    output = capture_logger_output(processor.output_results, summary)
+    summary = ConversionSummary(processed_pages=results, errors_count=1)
+    output = capture_logger_output(_output_results, summary, logger, False, True)
     assert "Summary: 2 file(s) processed, 1 error(s)." in output
     assert "Failed: test2.jpg - Error: Mock failure" in output
 

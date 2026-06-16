@@ -1,9 +1,9 @@
 from io import BytesIO
 import traceback
-from typing import Any, Optional
+from typing import Any
 
 from backend.image_converter.infrastructure.logger import Logger
-from backend.image_converter.core.internals.utilities import Result
+from backend.image_converter.core.exceptions import ConversionError
 
 
 class PdfPageExtractor:
@@ -12,18 +12,18 @@ class PdfPageExtractor:
     processed by the existing image pipeline.
     """
 
-    def __init__(self, logger: Optional[Logger] = None, dpi: int = 300, image_format: str = "PNG"):
+    def __init__(self, logger: Logger | None = None, dpi: int = 300, image_format: str = "PNG"):
         self.logger = logger
         self.dpi = dpi
         self.image_format = image_format
 
-    def rasterize_pages(self, pdf_bytes: bytes, source_hint: str = "") -> Result[Any]:
+    def rasterize_pages(self, pdf_bytes: bytes, source_hint: str = "") -> Any:
         """
         Convert the provided PDF bytes into a generator of image-encoded page bytes.
         """
         try:
             document = self._open_document(pdf_bytes)
-            
+
             def page_generator():
                 try:
                     scale = self._dpi_to_scale()
@@ -32,11 +32,11 @@ class PdfPageExtractor:
                         yield self._render_single_page(page, scale)
                 finally:
                     document.close()
-            
-            return Result.success(page_generator())
+
+            return page_generator()
         except Exception:
             self._log_failure(traceback.format_exc(), source_hint)
-            return Result.failure("PDF could not be rendered.")
+            raise ConversionError("PDF could not be rendered.") from None
 
     def _open_document(self, pdf_bytes: bytes) -> Any:
         import pypdfium2 as pdfium

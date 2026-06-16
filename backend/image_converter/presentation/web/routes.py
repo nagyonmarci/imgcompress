@@ -5,7 +5,7 @@ from flask import Blueprint, Response, request, jsonify, send_file, send_from_di
 from backend.image_converter.application.compress_images_usecase import CompressImagesUseCase
 from backend.image_converter.application.payload_expander_factory import create_payload_expander
 from backend.image_converter.config import settings
-from backend.image_converter.core.factory.converter_factory import ImageConverterFactory
+from backend.image_converter.core.exceptions import ConversionError
 from backend.image_converter.core.internals.utilities import has_internet
 from backend.image_converter.domain.image_resizer import ImageResizer
 from backend.image_converter.infrastructure.local_storage import LocalStorage
@@ -30,7 +30,7 @@ logger = Logger(debug=False, json_output=False)
 resizer = ImageResizer()
 storage = LocalStorage(logger=logger)
 payload_expander = create_payload_expander(logger)
-use_case = CompressImagesUseCase(logger, resizer, ImageConverterFactory, storage, payload_expander)
+use_case = CompressImagesUseCase(logger, resizer, storage, payload_expander)
 
 temp_folder_service = TemporaryFolderService(TEMP_DIR, EXPIRATION_TIME, logger)
 compression_service = CompressionService(logger, use_case, temp_folder_service)
@@ -60,15 +60,17 @@ def _storage_management_disabled_response():
 def compress_images():
     temp_folder_service.cleanup()
 
-    data_result = extract_form_data(request, logger)
-    if not data_result.is_successful:
-        return jsonify({"error": str(data_result.error)}), 400
+    try:
+        form_data = extract_form_data(request, logger)
+    except ConversionError as e:
+        return jsonify({"error": str(e)}), 400
 
-    result = compression_service.compress(data_result.value)
-    if not result.is_successful:
-        return jsonify({"error": "Compression failed", "message": result.error}), 500
+    try:
+        result = compression_service.compress(form_data)
+    except ConversionError as e:
+        return jsonify({"error": "Compression failed", "message": str(e)}), 500
 
-    return jsonify({"status": "ok", **result.value.to_json_dict()}), 200
+    return jsonify({"status": "ok", **result.to_json_dict()}), 200
 
 
 @api_blueprint.route("/download", methods=["GET"])
@@ -94,11 +96,11 @@ def download_all():
     temp_folder_service.cleanup()
     folder_param = request.args.get("folder")
 
-    result = compression_service.create_all_files_zip(folder_param)
-
-    if not result.is_successful:
-        return jsonify({"error": result.error}), 400
-    return send_from_directory(TEMP_DIR, result.value, as_attachment=True, mimetype="application/zip")
+    try:
+        zip_name = compression_service.create_all_files_zip(folder_param)
+    except ConversionError as e:
+        return jsonify({"error": str(e)}), 400
+    return send_from_directory(TEMP_DIR, zip_name, as_attachment=True, mimetype="application/zip")
 
 
 @api_blueprint.route("/storage_info", methods=["GET"])
@@ -116,9 +118,9 @@ def force_cleanup():
     if not storage_management_service.is_storage_management_enabled():
         return _storage_management_disabled_response()
 
-    res = temp_folder_service.cleanup(force=True)
-    if not res.is_successful:
-        return jsonify({"error": "Forced cleanup failed", "message": res.error}), 500
+    summary = temp_folder_service.cleanup(force=True)
+    if summary.errors:
+        return jsonify({"error": "Forced cleanup failed", "message": [e.error for e in summary.errors]}), 500
     return jsonify({"status": "ok", "message": "Forced cleanup completed."}), 200
 
 

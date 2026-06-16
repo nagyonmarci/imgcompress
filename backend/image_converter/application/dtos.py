@@ -2,7 +2,6 @@
 """
 
 from dataclasses import asdict, dataclass, field
-from typing import List, Optional, Tuple
 
 from werkzeug.datastructures import FileStorage
 
@@ -16,12 +15,12 @@ class CompressRequest:
     dest_folder: str
     image_format: ImageFormat
     quality: int
-    width: Optional[int]
-    target_size: Optional[TargetSize]
+    width: int | None
+    target_size: TargetSize | None
     use_rembg: bool = False
-    pdf_preset: Optional[str] = None
+    pdf_preset: str | None = None
     pdf_scale: str = "fit"
-    pdf_margin_mm: Optional[float] = None
+    pdf_margin_mm: float | None = None
     pdf_paginate: bool = False
 
 
@@ -29,6 +28,7 @@ class CompressRequest:
 class CompressResult:
     processed_files: list[str]
     errors: list[str]
+    page_results: list["PageProcessingResult"] = field(default_factory=list)
 
     def to_json_dict(self) -> dict:
         return {"processed_files": self.processed_files, "errors": self.errors}
@@ -46,15 +46,15 @@ class PageProcessingResult:
     file: str
     source: str
     destination: str
-    original_width: Optional[int]
-    resized_width: Optional[int]
+    original_width: int | None
+    resized_width: int | None
     is_successful: bool
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
 class ConversionSummary:
-    processed_pages: List[PageProcessingResult]
+    processed_pages: list[PageProcessingResult]
     errors_count: int
 
 
@@ -67,7 +67,7 @@ class FileProcessingSummary:
 
 @dataclass
 class ConversionResultsDto:
-    files: List[PageProcessingResult]
+    files: list[PageProcessingResult]
     file_processing_summary: FileProcessingSummary
 
 
@@ -75,18 +75,18 @@ class ConversionResultsDto:
 class ConversionOutputDto:
     status: str
     conversion_results: ConversionResultsDto
-    logs: Optional[List[dict]] = None
+    logs: list[dict | None] = None
 
 
 @dataclass(frozen=True)
 class CompressionFormData:
     """Parsed and validated /compress request body."""
 
-    uploaded_files: Tuple[FileStorage, ...]
+    uploaded_files: tuple[FileStorage, ...]
     quality: int
-    width: Optional[int]
+    width: int | None
     image_format: ImageFormat
-    target_size_kb: Optional[int]
+    target_size_kb: int | None
     use_rembg: bool
     pdf_preset: str
     pdf_scale: str
@@ -98,7 +98,7 @@ class CompressionFormData:
 class CompressionResponse:
     """Successful /compress response payload (before HTTP status wrapping)."""
 
-    converted_files: List[str]
+    converted_files: list[str]
     dest_folder: str
     process_summary: CompressResult
 
@@ -127,7 +127,7 @@ class ContainerFile:
 class ContainerInventory:
     """All files currently managed under the temp root, with totals."""
 
-    files: List[ContainerFile] = field(default_factory=list)
+    files: list[ContainerFile] = field(default_factory=list)
     total_size_mb: float = 0.0
     total_count: int = 0
 
@@ -139,13 +139,21 @@ class ContainerInventory:
         }
 
 
+def _kind_to_type_json(obj) -> dict:
+    """Shared serialization for cleanup DTOs that rename their `kind`
+    field to the wire key `type`."""
+    data = asdict(obj)
+    data["type"] = data.pop("kind")
+    return data
+
+
 @dataclass(frozen=True)
 class CleanedItem:
     kind: str
     path: str
 
     def to_json_dict(self) -> dict:
-        return {"type": self.kind, "path": self.path}
+        return _kind_to_type_json(self)
 
 
 @dataclass(frozen=True)
@@ -155,13 +163,13 @@ class CleanupError:
     error: str
 
     def to_json_dict(self) -> dict:
-        return {"type": self.kind, "path": self.path, "error": self.error}
+        return _kind_to_type_json(self)
 
 
 @dataclass
 class CleanupSummary:
-    deleted: List[CleanedItem] = field(default_factory=list)
-    errors: List[CleanupError] = field(default_factory=list)
+    deleted: list[CleanedItem] = field(default_factory=list)
+    errors: list[CleanupError] = field(default_factory=list)
 
     def to_json_dict(self) -> dict:
         return {

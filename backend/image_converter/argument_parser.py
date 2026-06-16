@@ -1,10 +1,9 @@
 import argparse
-from typing import List, Tuple
 
 from backend.image_converter.core.enums.runtime_mode import RuntimeMode
 
 
-def parse_arguments() -> Tuple[RuntimeMode, List[str]]:
+def parse_arguments() -> tuple[RuntimeMode, list[str]]:
     parser = argparse.ArgumentParser(
         description="imgcompress – image compression CLI & web app"
     )

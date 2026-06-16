@@ -79,10 +79,8 @@ def test_cleanup_temp_folders_returns_typed_summary(tmp_path):
 
     svc = CleanupService(str(tmp_path), expiration_time=999_999, logger=_Logger())
 
-    result = svc.cleanup_temp_folders(force=False)
+    summary = svc.cleanup_temp_folders(force=False)
 
-    assert result.is_successful
-    summary = result.value
     assert isinstance(summary, CleanupSummary)
     assert summary.errors == []
     assert summary.deleted == []
@@ -98,7 +96,7 @@ def test_cleanup_temp_folders_force_records_deleted_items(tmp_path):
 
     svc = CleanupService(str(tmp_path), expiration_time=3600, logger=_Logger())
 
-    summary = svc.cleanup_temp_folders(force=True).value
+    summary = svc.cleanup_temp_folders(force=True)
 
     kinds = sorted(item.kind for item in summary.deleted)
     assert kinds == ["directory", "zip"]
@@ -124,7 +122,7 @@ def test_cleanup_temp_folders_records_errors_with_typed_dto(tmp_path, monkeypatc
         lambda _p: time.time() - 999_999,
     )
 
-    summary = svc.cleanup_temp_folders(force=True).value
+    summary = svc.cleanup_temp_folders(force=True)
 
     assert len(summary.errors) == 1
     err = summary.errors[0]

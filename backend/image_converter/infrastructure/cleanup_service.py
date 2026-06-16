@@ -2,6 +2,7 @@ import os
 import shutil
 import time
 import traceback
+from typing import Callable
 
 from backend.image_converter.application.dtos import (
     CleanedItem,
@@ -10,7 +11,7 @@ from backend.image_converter.application.dtos import (
     ContainerFile,
     ContainerInventory,
 )
-from backend.image_converter.core.internals.utilities import Result
+from backend.image_converter.core.exceptions import ConversionError
 from backend.image_converter.domain.units import BYTES_PER_MEBIBYTE
 
 
@@ -27,24 +28,28 @@ class CleanupService:
         self.expiration_time = expiration_time
         self.logger = logger
 
-    def cleanup_temp_folders(self, force: bool = False) -> Result[CleanupSummary]:
+    def cleanup_temp_folders(self, force: bool = False) -> CleanupSummary:
         summary = CleanupSummary()
         current_time = time.time()
 
         for item in os.listdir(self.temp_dir):
             item_path = os.path.join(self.temp_dir, item)
             if os.path.isdir(item_path) and item.startswith(("source_", "converted_")):
-                result = self._maybe_delete_dir(item_path, force, current_time)
-                self._record_cleanup_outcome(summary, _KIND_DIRECTORY, item_path, result)
+                self._record_cleanup_outcome(
+                    summary, _KIND_DIRECTORY, item_path,
+                    lambda: self._maybe_delete_dir(item_path, force, current_time),
+                )
             elif (
                 os.path.isfile(item_path)
                 and item.startswith("converted_")
                 and item.endswith(".zip")
             ):
-                result = self._maybe_delete_zip(item_path, force, current_time)
-                self._record_cleanup_outcome(summary, _KIND_ZIP, item_path, result)
+                self._record_cleanup_outcome(
+                    summary, _KIND_ZIP, item_path,
+                    lambda: self._maybe_delete_zip(item_path, force, current_time),
+                )
 
-        return Result.success(summary)
+        return summary
 
     def get_container_files(self) -> ContainerInventory:
         files: list[ContainerFile] = []
@@ -97,49 +102,49 @@ class CleanupService:
         dir_path: str,
         force: bool,
         current_time: float,
-    ) -> Result[bool]:
+    ) -> bool:
         try:
             creation_time = os.path.getctime(dir_path)
             if force or (current_time - creation_time > self.expiration_time):
                 shutil.rmtree(dir_path, ignore_errors=True)
                 self.logger.log(f"Deleted temp folder: {dir_path}", "info")
-                return Result.success(True)
-            return Result.success(False)
+                return True
+            return False
         except Exception:
             tb = traceback.format_exc()
             self.logger.log(f"Error deleting folder {dir_path}: {tb}", "error")
-            return Result.failure(tb)
+            raise ConversionError(tb) from None
 
     def _maybe_delete_zip(
         self,
         zip_path: str,
         force: bool,
         current_time: float,
-    ) -> Result[bool]:
+    ) -> bool:
         try:
             creation_time = os.path.getctime(zip_path)
             if force or (current_time - creation_time > self.expiration_time):
                 os.remove(zip_path)
                 self.logger.log(f"Deleted ZIP file: {zip_path}", "info")
-                return Result.success(True)
-            return Result.success(False)
+                return True
+            return False
         except Exception:
             tb = traceback.format_exc()
             self.logger.log(f"Error deleting ZIP file {zip_path}: {tb}", "error")
-            return Result.failure(tb)
+            raise ConversionError(tb) from None
 
     @staticmethod
     def _record_cleanup_outcome(
         summary: CleanupSummary,
         kind: str,
         path: str,
-        result: Result[bool],
+        action: Callable[[], bool],
     ) -> None:
-        if result.is_successful:
-            if result.value:
+        try:
+            if action():
                 summary.deleted.append(CleanedItem(kind=kind, path=path))
-            return
-        summary.errors.append(CleanupError(kind=kind, path=path, error=result.error))
+        except ConversionError as exc:
+            summary.errors.append(CleanupError(kind=kind, path=path, error=str(exc)))
 
     @staticmethod
     def _file_size_mb(path: str) -> float:

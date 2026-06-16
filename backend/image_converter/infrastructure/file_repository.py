@@ -2,7 +2,7 @@ import os
 import traceback
 from typing import Callable, TypeVar
 
-from backend.image_converter.core.internals.utilities import Result
+from backend.image_converter.core.exceptions import ConversionError
 
 T = TypeVar("T")
 
@@ -12,10 +12,10 @@ class FileRepository:
     Reads/writes file bytes on disk.
     """
 
-    def read_file(self, path: str) -> Result[bytes]:
+    def read_file(self, path: str) -> bytes:
         return self._execute(lambda: self._read_bytes(path), f"read '{path}'")
 
-    def write_file(self, path: str, data: bytes) -> Result[None]:
+    def write_file(self, path: str, data: bytes) -> None:
         return self._execute(lambda: self._write_bytes(path, data), f"write '{path}'")
 
     def _read_bytes(self, path: str) -> bytes:
@@ -29,9 +29,9 @@ class FileRepository:
         with open(path, "wb") as f:
             f.write(data)
 
-    def _execute(self, action: Callable[[], T], context: str) -> Result[T]:
+    def _execute(self, action: Callable[[], T], context: str) -> T:
         try:
-            return Result.success(action())
+            return action()
         except Exception:
             tb = traceback.format_exc()
-            return Result.failure(f"Failed to {context}: {tb}")
+            raise ConversionError(f"Failed to {context}: {tb}") from None

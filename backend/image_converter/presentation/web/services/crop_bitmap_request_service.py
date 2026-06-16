@@ -3,13 +3,13 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Optional
+from backend.image_converter.core.exceptions import ConversionError
 
 
 @dataclass(frozen=True)
 class CropBitmapResponse:
-    value: Optional[BytesIO]
-    error: Optional[str]
+    value: BytesIO | None
+    error: str | None
     status_code: int
 
     @property
@@ -37,13 +37,14 @@ class CropBitmapRequestService:
         try:
             if os.path.getsize(temp_path) == 0:
                 return self._failure("Uploaded file was empty.", 400)
-            result = self.preview_service.build_preview_from_file(filename, temp_path)
+            try:
+                preview = self.preview_service.build_preview_from_file(filename, temp_path)
+            except ConversionError as e:
+                return self._failure(str(e), 415)
         finally:
             self._remove(temp_path)
 
-        if not result.is_successful:
-            return self._failure(result.error, 415)
-        return CropBitmapResponse(result.value, None, 200)
+        return CropBitmapResponse(preview, None, 200)
 
     def _save_upload(self, upload) -> str:
         fd, path = tempfile.mkstemp(

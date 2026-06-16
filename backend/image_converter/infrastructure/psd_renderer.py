@@ -1,17 +1,17 @@
 from io import BytesIO
 
-from backend.image_converter.core.internals.utilities import Result
+from backend.image_converter.core.exceptions import ConversionError
 
 
 class PsdRenderer:
     def __init__(self, logger):
         self.logger = logger
 
-    def render(self, source_name: str, data: bytes) -> Result[bytes]:
+    def render(self, source_name: str, data: bytes) -> bytes:
         try:
             from psd_tools import PSDImage
         except ImportError:
-            return Result.failure("psd-tools is not installed; cannot process PSD files.")
+            raise ConversionError("psd-tools is not installed; cannot process PSD files.") from None
 
         try:
             psd = PSDImage.open(BytesIO(data))
@@ -27,7 +27,7 @@ class PsdRenderer:
 
             buffer = BytesIO()
             flattened.save(buffer, format="PNG", optimize=False, compress_level=6)
-            return Result.success(buffer.getvalue())
+            return buffer.getvalue()
         except Exception as exc:
             self.logger.log(f"Failed to render PSD '{source_name}': {exc!r}", "error")
-            return Result.failure("PSD could not be rendered.")
+            raise ConversionError("PSD could not be rendered.") from None

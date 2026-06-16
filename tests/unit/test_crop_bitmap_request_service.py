@@ -11,7 +11,7 @@ from __future__ import annotations
 import io
 import os
 
-from backend.image_converter.core.internals.utilities import Result
+from backend.image_converter.core.exceptions import ConversionError
 from backend.image_converter.presentation.web.services.crop_bitmap_request_service import (
     CropBitmapRequestService,
 )
@@ -44,12 +44,14 @@ class _RecordingPreviewService:
         with open(file_path, "rb") as handle:
             self.seen_payload = handle.read()
         assert filename
+        if isinstance(self._response, Exception):
+            raise self._response
         return self._response
 
 
 def test_build_spools_upload_to_disk_and_cleans_up_on_success(tmp_path):
     payload = b"PNG-PAYLOAD" * 1024
-    preview = _RecordingPreviewService(Result.success(io.BytesIO(b"\x89PNG\r\n\x1a\n")))
+    preview = _RecordingPreviewService(io.BytesIO(b"\x89PNG\r\n\x1a\n"))
     service = CropBitmapRequestService(preview, str(tmp_path))
 
     response = service.build({"file": _Upload("photo.psd", payload)})
@@ -63,7 +65,7 @@ def test_build_spools_upload_to_disk_and_cleans_up_on_success(tmp_path):
 
 
 def test_build_cleans_up_temp_file_when_preview_fails(tmp_path):
-    preview = _RecordingPreviewService(Result.failure("decode error"))
+    preview = _RecordingPreviewService(ConversionError("decode error"))
     service = CropBitmapRequestService(preview, str(tmp_path))
 
     response = service.build({"file": _Upload("photo.psd", b"data")})
@@ -75,7 +77,7 @@ def test_build_cleans_up_temp_file_when_preview_fails(tmp_path):
 
 
 def test_build_rejects_missing_file_with_400(tmp_path):
-    preview = _RecordingPreviewService(Result.success(io.BytesIO()))
+    preview = _RecordingPreviewService(io.BytesIO())
     service = CropBitmapRequestService(preview, str(tmp_path))
 
     response = service.build({})
@@ -86,7 +88,7 @@ def test_build_rejects_missing_file_with_400(tmp_path):
 
 
 def test_build_rejects_empty_filename_with_400(tmp_path):
-    preview = _RecordingPreviewService(Result.success(io.BytesIO()))
+    preview = _RecordingPreviewService(io.BytesIO())
     service = CropBitmapRequestService(preview, str(tmp_path))
 
     response = service.build({"file": _Upload("   ", b"data")})
@@ -97,7 +99,7 @@ def test_build_rejects_empty_filename_with_400(tmp_path):
 
 
 def test_build_rejects_empty_upload_body_with_400(tmp_path):
-    preview = _RecordingPreviewService(Result.success(io.BytesIO()))
+    preview = _RecordingPreviewService(io.BytesIO())
     service = CropBitmapRequestService(preview, str(tmp_path))
 
     response = service.build({"file": _Upload("photo.psd", b"")})

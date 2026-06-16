@@ -11,7 +11,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional, Tuple, TypeVar
+from typing import Callable, TypeVar
 
 from backend.image_converter.config.app_config import (
     AppConfig,
@@ -38,7 +38,7 @@ _ENV_FALSY = frozenset({"false", "0", "no", "off"})
 
 @dataclass(frozen=True)
 class _FeatureFlagOverride:
-    json_path: Tuple[str, ...]
+    json_path: tuple[str, ...]
     env_var: str
     inverted: bool
 
@@ -145,7 +145,7 @@ class _Reader:
         self._root = root
         self._errors = errors
 
-    def require_str(self, path: Tuple[str, ...]) -> str:
+    def require_str(self, path: tuple[str, ...]) -> str:
         return self._read(
             path,
             validator=lambda v: isinstance(v, str) and v.strip() != "",
@@ -155,31 +155,27 @@ class _Reader:
 
     def require_int(
         self,
-        path: Tuple[str, ...],
+        path: tuple[str, ...],
         *,
         minimum: int,
-        maximum: Optional[int] = None,
+        maximum: int | None = None,
     ) -> int:
-        def _validate(value: object) -> bool:
+        def _is_valid(value: object) -> bool:
             if isinstance(value, bool) or not isinstance(value, int):
-                self._errors.append(f"config key '{_render(path)}' must be an integer")
                 return False
             if value < minimum:
-                self._errors.append(f"config key '{_render(path)}' must be >= {minimum}")
                 return False
-            if maximum is not None and value > maximum:
-                self._errors.append(f"config key '{_render(path)}' must be <= {maximum}")
-                return False
-            return True
+            return maximum is None or value <= maximum
 
-        raw = self._lookup(path)
-        if raw is _SENTINEL:
-            return 0
-        if not _validate(raw):
-            return 0
-        return raw  # type: ignore[return-value]
+        bound = f"between {minimum} and {maximum}" if maximum is not None else f">= {minimum}"
+        return self._read(
+            path,
+            validator=_is_valid,
+            message=f"must be an integer {bound}",
+            fallback=0,
+        )
 
-    def require_bool(self, path: Tuple[str, ...]) -> bool:
+    def require_bool(self, path: tuple[str, ...]) -> bool:
         return self._read(
             path,
             validator=lambda v: isinstance(v, bool),
@@ -187,7 +183,7 @@ class _Reader:
             fallback=False,
         )
 
-    def require_web_workers(self, path: Tuple[str, ...]) -> WebWorkerCount:
+    def require_web_workers(self, path: tuple[str, ...]) -> WebWorkerCount:
         raw = self._lookup(path)
         if raw is _SENTINEL:
             return WebWorkerCount.auto()
@@ -208,7 +204,7 @@ class _Reader:
             return WebWorkerCount.auto()
         return WebWorkerCount.fixed(raw)
 
-    def require_extension_list(self, path: Tuple[str, ...]) -> Tuple[str, ...]:
+    def require_extension_list(self, path: tuple[str, ...]) -> tuple[str, ...]:
         raw = self._lookup(path)
         if raw is _SENTINEL:
             return ()
@@ -231,7 +227,7 @@ class _Reader:
             normalized.append(cleaned)
         return tuple(normalized)
 
-    def require_feature_flag(self, path: Tuple[str, ...]) -> bool:
+    def require_feature_flag(self, path: tuple[str, ...]) -> bool:
         override = self._matching_override(path)
         if override is not None:
             env_value = _read_env_bool(override.env_var, self._errors)
@@ -240,13 +236,13 @@ class _Reader:
         return self.require_bool(path)
 
     @staticmethod
-    def _matching_override(path: Tuple[str, ...]) -> Optional[_FeatureFlagOverride]:
+    def _matching_override(path: tuple[str, ...]) -> _FeatureFlagOverride | None:
         for override in _OVERRIDES:
             if override.json_path == path:
                 return override
         return None
 
-    def _lookup(self, path: Tuple[str, ...]) -> object:
+    def _lookup(self, path: tuple[str, ...]) -> object:
         node: object = self._root
         for part in path:
             if not isinstance(node, dict) or part not in node:
@@ -257,7 +253,7 @@ class _Reader:
 
     def _read(
         self,
-        path: Tuple[str, ...],
+        path: tuple[str, ...],
         *,
         validator: Callable[[object], bool],
         message: str,
@@ -272,11 +268,11 @@ class _Reader:
         return raw  # type: ignore[return-value]
 
 
-def _render(path: Tuple[str, ...]) -> str:
+def _render(path: tuple[str, ...]) -> str:
     return ".".join(path)
 
 
-def _read_env_bool(name: str, errors: list[str]) -> Optional[bool]:
+def _read_env_bool(name: str, errors: list[str]) -> bool | None:
     raw = os.environ.get(name)
     if raw is None:
         return None

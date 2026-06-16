@@ -1,8 +1,10 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
+from backend.image_converter.core.exceptions import ConversionError
 from backend.image_converter.presentation.web import routes
 
 
@@ -22,13 +24,11 @@ def test_multiple_concurrent_psd_previews_all_succeed():
     service = routes.crop_preview_service
 
     def _decode_once(index: int):
-        result = service.build_preview(
+        buffer = service.build_preview(
             psd_path.name,
             raw_bytes,
             request_id=f"concurrent-{index}",
         )
-        assert result.is_successful, result.error
-        buffer = result.value
         buffer.seek(0)
         with Image.open(buffer) as img:
             assert img.format == "PNG"
@@ -51,22 +51,20 @@ def test_concurrent_mix_of_supported_and_unsupported_does_not_cross_state():
     service = routes.crop_preview_service
 
     def _decode_psd(index: int):
-        result = service.build_preview(
+        service.build_preview(
             psd_path.name,
             psd_bytes,
             request_id=f"mix-psd-{index}",
         )
-        assert result.is_successful, result.error
         return "ok"
 
     def _decode_pdf(index: int):
-        result = service.build_preview(
-            pdf_path.name,
-            pdf_bytes,
-            request_id=f"mix-pdf-{index}",
-        )
-        assert not result.is_successful
-        assert "not compatible" in result.error
+        with pytest.raises(ConversionError, match="not compatible"):
+            service.build_preview(
+                pdf_path.name,
+                pdf_bytes,
+                request_id=f"mix-pdf-{index}",
+            )
         return "rejected"
 
     with ThreadPoolExecutor(max_workers=4) as pool:
